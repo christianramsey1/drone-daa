@@ -1,0 +1,73 @@
+{
+  "identifier" : "D4E5F6A7-8B9C-4D0E-A1B2-C3D4E5F6A7B8",
+  "nonRenewingSubscriptions" : [
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "A0000001-0001-0001-0001-000000000001",
+      "localizations" : [
+        {
+          "description" : "Unlock Lake Lanier for one boating season. Includes on-water route planning, every marina and fuel dock, live weather and water levels. Valid for 365 days from purchase.",
+          "displayName" : "Lake Lanier Season Pass",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.lake360.pass.lake.lanier.1y",
+      "referenceName" : "Lake Lanier Season Pass",
+      "type" : "NonRenewingSubscription"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "A0000001-0001-0001-0001-000000000002",
+      "localizations" : [
+        {
+          "description" : "Unlock Lake Tahoe for one boating season. Includes on-water route planning with 526km routing network, 65+ POIs, live weather and water levels. Valid for 365 days from purchase.",
+          "displayName" : "Lake Tahoe Season Pass",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.lake360.pass.lake.tahoe.1y",
+      "referenceName" : "Lake Tahoe Season Pass",
+      "type" : "NonRenewingSubscription"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "A0000001-0001-0001-0001-000000000003",
+      "localizations" : [
+        {
+          "description" : "Unlock Lake Norman for one boating season. Includes every marina and fuel dock, live weather and water levels. Valid for 365 days from purchase.",
+          "displayName" : "Lake Norman Season Pass",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.lake360.pass.lake.norman.1y",
+      "referenceName" : "Lake Norman Season Pass",
+      "type" : "NonRenewingSubscription"
+    }
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_askToBuyEnabled" : false,
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "cycleCount"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

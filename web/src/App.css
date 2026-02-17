@@ -1,0 +1,539 @@
+/* web/src/App.css */
+
+:root {
+  --panel-w: 340px;
+  --panel-bg: rgba(18, 18, 20, 0.92);
+  --panel-border: rgba(255, 255, 255, 0.12);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.62);
+  --chip: rgba(255, 255, 255, 0.08);
+  --chip-border: rgba(255, 255, 255, 0.16);
+  --shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+/* App shell */
+.appShell {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh; /* iOS Safari: use dynamic viewport height to account for browser UI */
+  overflow: hidden;
+  background: #000;
+  color: var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+.mapLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* Side panel overlay layer */
+.sidePanelLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+}
+
+/* Side panel */
+.sidePanel {
+  pointer-events: auto;
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top, 0px));
+  bottom: 10px;
+  left: 10px;
+  width: var(--panel-w);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  transform: translateX(0);
+  transition: transform 220ms ease;
+}
+
+/* When closed, shift panel left by 350px so handle is at left edge */
+.sidePanel.closed {
+  transform: translateX(-350px);
+}
+
+/* Panel handle */
+.panelHandle {
+  position: absolute;
+  top: 50%;
+  right: -30px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 84px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.7);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-direction: column;
+}
+
+.panelHandle:active {
+  transform: translateY(-50%) scale(0.98);
+}
+
+.panelHandleBar {
+  width: 3px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.panelHandleChevron {
+  font-size: 14px;
+  line-height: 14px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Header */
+.panelHeader {
+  padding: 14px 14px 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.panelTitle {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panelAppName {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  font-size: 16px;
+}
+
+.panelSubtitle {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Tabs */
+.panelTabs {
+  display: flex;
+  gap: 8px;
+  padding: 10px 10px 10px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.tabBtn {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.80);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tabBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tabBtn.active {
+  background: rgba(0, 209, 255, 0.14);
+  border-color: rgba(0, 209, 255, 0.35);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Body */
+.panelBody {
+  padding: 12px;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Dark scrollbar for panel */
+.panelBody::-webkit-scrollbar {
+  width: 8px;
+}
+
+.panelBody::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.panelBody::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.panelBody::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Dark horizontal scrollbar for hourly forecast */
+.hourlyScroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.hourlyScroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.hourlyScroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.hourlyScroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.hourlyScroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.panelSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sectionTitle {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.2px;
+}
+
+.smallMuted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Rows + switches */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rowTitle {
+  font-weight: 650;
+  font-size: 13px;
+}
+
+.rowSub {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* Toggle switch */
+.switch {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  transition: 160ms ease;
+}
+
+.slider:before {
+  content: "";
+  position: absolute;
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: 999px;
+  transition: 160ms ease;
+}
+
+.switch input:checked + .slider {
+  background: rgba(0, 209, 255, 0.22);
+  border-color: rgba(0, 209, 255, 0.35);
+}
+
+.switch input:checked + .slider:before {
+  transform: translate(18px, -50%);
+}
+
+/* Lists */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.listItem {
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.listItem:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.listItem.selected {
+  border-color: rgba(0, 209, 255, 0.35);
+  background: rgba(0, 209, 255, 0.08);
+}
+
+.listTitle {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.listSub {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chipBtn.compact {
+  padding: 4px 8px;
+  font-size: 11px;
+  min-width: 36px;
+  flex-shrink: 0;
+}
+
+/* Pills row (category filters) */
+.pillRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pillBtn {
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-border);
+  background: var(--chip);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.pillBtn:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.pillBtn.active {
+  background: rgba(0, 209, 255, 0.14);
+  border-color: rgba(0, 209, 255, 0.35);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Buttons (chips) */
+.btnRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chipBtn {
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--chip-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.86);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.chipBtn:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.chipBtn.active {
+  background: rgba(0, 209, 255, 0.14);
+  border-color: rgba(0, 209, 255, 0.35);
+}
+
+.chipBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Link-style button */
+.linkBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.linkBtn:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+/* Key/Value blocks */
+.kv {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+}
+
+.divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.10);
+  margin: 6px 0;
+}
+
+.errText {
+  color: #ff453a;
+  font-size: 12px;
+}
+
+/* HUD pills */
+.hudPills {
+  /* App.tsx sets inline positioning; add safe area for iOS home indicator */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pill {
+  user-select: none;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.30);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pill:active {
+  transform: scale(0.99);
+}
+
+/* Optional bottom nav support (in case your older UI still renders it) */
+.bottomNav {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 35;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.bottomNav .navBtn {
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(18, 18, 20, 0.80);
+  color: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+/* Make sure MapKit layer is interactive */
+.mapLayer {
+  pointer-events: auto;
+}
+
+/* MapKit callout styling for channel markers */
+.mk-callout {
+  font-family: system-ui, -apple-system, sans-serif !important;
+  transform: scale(0.8) !important;
+  transform-origin: bottom center !important;
+}
+
+.mk-callout-content {
+  padding: 3px 6px !important;
+  max-width: 100px !important;
+  min-width: auto !important;
+}
+
+.mk-callout-title {
+  font-size: 9px !important;
+  font-weight: 500 !important;
+  line-height: 1.2 !important;
+  margin: 0 !important;
+}
+
+.mk-callout-subtitle {
+  font-size: 8px !important;
+  font-weight: 400 !important;
+  line-height: 1.2 !important;
+  margin: 1px 0 0 0 !important;
+  opacity: 0.55;
+}
+
+/* Mobile responsive styles */
+@media (max-width: 600px) {
+  /* Keep HUD pills at bottom on mobile (removed top override for Dynamic Island) */
+
+  /* Smaller pills on mobile */
+  .pill {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
+  /* Side panel takes full width on mobile when open */
+  .sidePanel {
+    width: calc(100vw - 50px);
+    max-width: 340px;
+  }
+
+  /* Smaller panel text on mobile */
+  .panelBody {
+    font-size: 13px;
+  }
+}

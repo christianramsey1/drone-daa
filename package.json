@@ -1,0 +1,24 @@
+{
+  "name": "drone-daa",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "concurrently -k -n API,WEB \"node api-local.js\" \"npm --prefix web run dev\"",
+    "dev:api": "node api-local.js",
+    "dev:web": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "preview": "npm --prefix web run preview"
+  },
+  "dependencies": {
+    "@vercel/postgres": "^0.10.0",
+    "cheerio": "^1.2.0",
+    "express": "^5.2.1",
+    "jose": "^4.15.9"
+  },
+  "devDependencies": {
+    "@vercel/node": "^5.5.28",
+    "concurrently": "^9.0.0",
+    "dotenv": "^17.3.1"
+  }
+}
