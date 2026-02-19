@@ -126,7 +126,7 @@ function initWifi() {
   //
   // Practical approach: accept WiFi RID data via HTTP ingest.
   console.log("[rid] WiFi RID: use HTTP ingest endpoint for external WiFi scanners");
-  console.log("[rid]   POST http://localhost:${HTTP_PORT}/api/rid");
+  console.log(`[rid]   POST http://localhost:${HTTP_PORT}/api/rid`);
 }
 
 // ── Process ODID payload (common for BLE + WiFi + HTTP ingest) ───────
