@@ -17,7 +17,7 @@ const LeafletMap = lazy(() => import("./LeafletMap"));
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-type PanelTab = "maps" | "alerts" | "adsb" | "remoteid" | "faa" | "weather" | "settings" | "howto";
+type PanelTab = "maps" | "alerts" | "adsb" | "remoteid" | "details" | "weather" | "settings" | "howto";
 
 type MapLayer = "apple" | "topo";
 
@@ -545,8 +545,11 @@ export default function App() {
   const faa = useFaaLayers(mapBbox);
   const [vfrSectionalEnabled, setVfrSectionalEnabled] = useState(false);
 
-  // Selected FAA zone (for TFR details etc.)
+  // Selected items (for Details tab)
   const [selectedFaaZone, setSelectedFaaZone] = useState<import("./services/airspace").AirspaceZone | null>(null);
+  const [selectedObstruction, setSelectedObstruction] = useState<import("./services/airspace").ObstructionPoint | null>(null);
+  const [selectedAircraft, setSelectedAircraft] = useState<string | null>(null); // aircraft id
+  const [selectedDrone, setSelectedDrone] = useState<string | null>(null); // drone id
 
   // Remote ID
   const rid = useRemoteId();
@@ -1039,14 +1042,49 @@ export default function App() {
   const emoji = conditionEmoji(weather?.conditionCode, weather?.daylight);
   const condText = conditionLabel(weather?.conditionCode);
 
+  // ── Annotation click → select item and show Details tab ─────────
+  const handleAnnotationSelect = (annotationId: string) => {
+    if (annotationId.startsWith("obs-")) {
+      const obs = faa.obstructions.find((o) => o.id === annotationId);
+      if (obs) {
+        setSelectedObstruction((prev) => prev?.id === obs.id ? null : obs);
+        setSelectedFaaZone(null);
+        setSelectedAircraft(null);
+        setSelectedDrone(null);
+        setPanelTab("details");
+        setPanelOpen(true);
+      }
+    } else if (annotationId.startsWith("adsb-")) {
+      const acId = annotationId.slice(5);
+      setSelectedAircraft((prev) => prev === acId ? null : acId);
+      setSelectedFaaZone(null);
+      setSelectedObstruction(null);
+      setSelectedDrone(null);
+      setPanelTab("details");
+      setPanelOpen(true);
+    } else if (annotationId.startsWith("rid-") && !annotationId.startsWith("rid-op-")) {
+      const droneId = annotationId.slice(4);
+      setSelectedDrone((prev) => prev === droneId ? null : droneId);
+      setSelectedFaaZone(null);
+      setSelectedObstruction(null);
+      setSelectedAircraft(null);
+      setPanelTab("details");
+      setPanelOpen(true);
+    }
+  };
+
   // ── Overlay click → select FAA zone ─────────────────────────────
   const handleOverlaySelect = (overlayId: string) => {
     if (!overlayId.startsWith("faa-")) return;
     const zoneId = overlayId.slice(4); // strip "faa-" prefix
     const zone = faa.zones.find((z) => z.id === zoneId);
     if (zone) {
+      setSelectedObstruction(null);
       setSelectedFaaZone((prev) => prev?.id === zone.id ? null : zone);
-      setPanelTab("faa");
+      setSelectedAircraft(null);
+      setSelectedDrone(null);
+      setPanelTab("details");
+      setPanelOpen(true);
     }
   };
 
@@ -1063,6 +1101,7 @@ export default function App() {
             annotations={allMapAnnotations}
             polylines={allMapPolylines}
             tileOverlays={mapTileOverlays}
+            onSelect={handleAnnotationSelect}
             onViewChange={(_zoom, bounds) => {
               setMapBbox(bounds);
             }}
@@ -1077,6 +1116,7 @@ export default function App() {
               annotations={allMapAnnotations}
               polylines={allMapPolylines}
               tileOverlays={mapTileOverlays}
+              onSelect={handleAnnotationSelect}
               onViewChange={(zoom, bounds) => {
                 setLeafletView({ zoom, bounds });
                 setMapBbox(bounds);
@@ -1116,7 +1156,7 @@ export default function App() {
               ))}
             </div>
             <div className="tabRow">
-              {([["faa", "FAA"], ["weather", "Weather"], ["settings", "Settings"], ["howto", "How To"]] as const).map(([id, label]) => (
+              {([["details", "Details"], ["weather", "Weather"], ["settings", "Settings"], ["howto", "How To"]] as const).map(([id, label]) => (
                 <button key={id} className={`tabBtn ${panelTab === id ? "active" : ""}`}
                   onClick={() => setPanelTab(id)}>{label}</button>
               ))}
@@ -1155,7 +1195,8 @@ export default function App() {
                       className="chipBtn"
                       disabled={!!downloadProgress?.downloading}
                       onClick={async () => {
-                        const { downloadTilesForArea, getCacheStats } = await import("./services/offlineTiles");
+                        const { downloadTilesForArea, getCacheStats, cacheFaaLayer } = await import("./services/offlineTiles");
+                        const { FAA_LAYERS: allLayers, fetchAirspace: fetchAir, fetchObstructions: fetchObs } = await import("./services/airspace");
                         const abort = new AbortController();
                         downloadAbortRef.current = abort;
                         setDownloadProgress({ downloading: true, downloaded: 0, total: 0, failed: 0 });
@@ -1168,6 +1209,7 @@ export default function App() {
                         const zoomMin = Math.max(currentZoom - 2, 8);
                         const zoomMax = Math.min(currentZoom + 2, 16);
                         try {
+                          // Download map tiles
                           await downloadTilesForArea(bbox, zoomMin, zoomMax,
                             "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
                             (downloaded, total, failed) => {
@@ -1175,6 +1217,21 @@ export default function App() {
                             },
                             abort.signal,
                           );
+                          // Cache enabled FAA layers + obstructions for offline use
+                          const enabledIds = faa.enabledLayers;
+                          for (const layer of allLayers) {
+                            if (!enabledIds.has(layer.id) || layer.id === "obstructions") continue;
+                            try {
+                              const zones = await fetchAir(bbox, layer, abort.signal);
+                              await cacheFaaLayer(layer.id, bbox, JSON.stringify(zones));
+                            } catch { /* skip on error */ }
+                          }
+                          if (enabledIds.has("obstructions")) {
+                            try {
+                              const obs = await fetchObs(bbox, abort.signal);
+                              await cacheFaaLayer("obstructions", bbox, JSON.stringify(obs));
+                            } catch { /* skip */ }
+                          }
                         } catch { /* aborted or failed */ }
                         setDownloadProgress(null);
                         downloadAbortRef.current = null;
@@ -1229,6 +1286,63 @@ export default function App() {
                   </div>
                 )}
                 <p className="smallMuted">Only Topo maps are available for offline use.</p>
+
+                <div className="divider" />
+
+                {/* FAA Airspace Layer Toggles */}
+                <div className="sectionTitle">FAA Airspace Layers</div>
+                <p className="smallMuted">Toggle layers to display on map. Data from FAA ArcGIS.</p>
+
+                {/* VFR Sectional chart overlay */}
+                <div className="row" style={{ alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                    <div style={{
+                      width: 10, height: 10, borderRadius: 2,
+                      background: "linear-gradient(135deg, #8b5cf6, #3b82f6, #10b981)",
+                      flexShrink: 0,
+                    }} />
+                    <span className="rowTitle">VFR Sectional Chart</span>
+                  </div>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={vfrSectionalEnabled}
+                      onChange={() => setVfrSectionalEnabled((v) => !v)}
+                    />
+                    <span className="slider" />
+                  </label>
+                </div>
+
+                <div className="divider" />
+                <div className="sectionTitle" style={{ fontSize: 11 }}>Airspace &amp; Restriction Layers</div>
+
+                {FAA_LAYERS.map((layer) => (
+                  <div className="row" key={layer.id} style={{ alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                      <div style={{
+                        width: 10, height: 10, borderRadius: 2,
+                        background: airspaceColor(layer.defaultType),
+                        flexShrink: 0,
+                      }} />
+                      <span className="rowTitle">{layer.label}</span>
+                    </div>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={faa.enabledLayers.has(layer.id)}
+                        onChange={() => faa.toggleLayer(layer.id)}
+                      />
+                      <span className="slider" />
+                    </label>
+                  </div>
+                ))}
+
+                {faa.loading && (
+                  <p className="smallMuted">Loading airspace data...</p>
+                )}
+                {faa.error && (
+                  <p className="errText">{faa.error}</p>
+                )}
               </div>
             )}
 
@@ -1416,119 +1530,13 @@ export default function App() {
               </div>
             )}
 
-            {panelTab === "faa" && (
+            {panelTab === "details" && (
               <div className="panelSection">
-                <div className="sectionTitle">FAA Airspace Layers</div>
-                <p className="smallMuted">Toggle layers to display on map. Data from FAA ArcGIS.</p>
+                <div className="sectionTitle">Details</div>
 
-                {/* VFR Sectional chart overlay */}
-                <div className="row" style={{ alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-                    <div style={{
-                      width: 10, height: 10, borderRadius: 2,
-                      background: "linear-gradient(135deg, #8b5cf6, #3b82f6, #10b981)",
-                      flexShrink: 0,
-                    }} />
-                    <span className="rowTitle">VFR Sectional Chart</span>
-                  </div>
-                  <label className="switch">
-                    <input
-                      type="checkbox"
-                      checked={vfrSectionalEnabled}
-                      onChange={() => setVfrSectionalEnabled((v) => !v)}
-                    />
-                    <span className="slider" />
-                  </label>
-                </div>
-
-                <div className="divider" />
-                <div className="sectionTitle" style={{ fontSize: 11 }}>Airspace &amp; Restriction Layers</div>
-
-                {FAA_LAYERS.map((layer) => (
-                  <div className="row" key={layer.id} style={{ alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-                      <div style={{
-                        width: 10, height: 10, borderRadius: 2,
-                        background: airspaceColor(layer.defaultType),
-                        flexShrink: 0,
-                      }} />
-                      <span className="rowTitle">{layer.label}</span>
-                    </div>
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={faa.enabledLayers.has(layer.id)}
-                        onChange={() => faa.toggleLayer(layer.id)}
-                      />
-                      <span className="slider" />
-                    </label>
-                  </div>
-                ))}
-
-                {faa.loading && (
-                  <p className="smallMuted">Loading airspace data...</p>
-                )}
-                {faa.error && (
-                  <p className="errText">{faa.error}</p>
-                )}
-
-                <div className="divider" />
-                {(() => {
-                  const laancCount = faa.zones.filter((z) => z.type === "laanc").length;
-                  const nonLaanc = faa.zones.filter((z) => z.type !== "laanc");
-                  return (
-                    <>
-                      <span className="smallMuted">
-                        {nonLaanc.length} airspace zone{nonLaanc.length !== 1 ? "s" : ""}
-                        {laancCount > 0 ? ` + ${laancCount} LAANC grid cell${laancCount !== 1 ? "s" : ""}` : ""}
-                      </span>
-
-                      {/* Zone list — airspace zones (non-LAANC) */}
-                      {nonLaanc.length > 0 && (
-                        <div className="list" style={{ maxHeight: 200, overflowY: "auto", marginTop: 8 }}>
-                          {nonLaanc.slice(0, 50).map((zone) => (
-                            <div
-                              key={zone.id}
-                              className="listItem"
-                              style={{
-                                padding: "4px 8px", fontSize: 11, cursor: "pointer",
-                                background: selectedFaaZone?.id === zone.id ? "rgba(255,255,255,0.1)" : undefined,
-                              }}
-                              onClick={() => setSelectedFaaZone(selectedFaaZone?.id === zone.id ? null : zone)}
-                            >
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <div style={{
-                                  width: 6, height: 6, borderRadius: 1,
-                                  background: airspaceColor(zone.type),
-                                  flexShrink: 0,
-                                }} />
-                                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                  {zone.name}
-                                </span>
-                                {zone.ceilingFt < 99999 && (
-                                  <span className="smallMuted" style={{ flexShrink: 0 }}>
-                                    {zone.floorFt}-{zone.ceilingFt} ft
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {laancCount > 0 && !selectedFaaZone?.type?.startsWith("laanc") && (
-                        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 6, fontStyle: "italic" }}>
-                          Tap a LAANC grid cell on the map to see its altitude ceiling
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-
-                {/* Selected zone detail */}
+                {/* Selected airspace zone detail */}
                 {selectedFaaZone && (
                   <div className="kv" style={{
-                    marginTop: 8,
                     padding: 8,
                     background: "rgba(255,255,255,0.05)",
                     borderRadius: 8,
@@ -1586,6 +1594,191 @@ export default function App() {
                         )}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Selected obstruction detail */}
+                {selectedObstruction && (
+                  <div className="kv" style={{
+                    padding: 8,
+                    background: "rgba(255,255,255,0.05)",
+                    borderRadius: 8,
+                    borderLeft: "3px solid #fb923c",
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ fontWeight: 600, fontSize: 12 }}>Obstruction</div>
+                      <span
+                        style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: "0 2px" }}
+                        onClick={() => setSelectedObstruction(null)}
+                      >
+                        dismiss
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "#fb923c", marginTop: 4 }}>
+                      {selectedObstruction.aglFt} ft AGL
+                    </div>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginTop: 4 }}>
+                      <div>Type: {selectedObstruction.typeCode}</div>
+                      <div>AMSL: {selectedObstruction.amslFt} ft</div>
+                      {selectedObstruction.lighting && (
+                        <div>Lighting: {selectedObstruction.lighting === "R" ? "Red" : selectedObstruction.lighting === "D" ? "Dual (Red/White)" : selectedObstruction.lighting === "W" ? "White" : selectedObstruction.lighting === "N" ? "None" : selectedObstruction.lighting}</div>
+                      )}
+                      {selectedObstruction.city && (
+                        <div>{selectedObstruction.city}{selectedObstruction.state ? `, ${selectedObstruction.state}` : ""}</div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>
+                      {selectedObstruction.lat.toFixed(5)}, {selectedObstruction.lon.toFixed(5)}
+                    </div>
+                  </div>
+                )}
+
+                {/* Selected aircraft detail */}
+                {selectedAircraft && (() => {
+                  const ac = sortedAircraft.find((a) => a.id === selectedAircraft);
+                  if (!ac) return null;
+                  const vertChar = ac.vertRateFpm
+                    ? ac.vertRateFpm > 100 ? "\u2191" : ac.vertRateFpm < -100 ? "\u2193" : ""
+                    : "";
+                  const alertColor = ac._alertLevel === "warning" ? "#ff453a"
+                    : ac._alertLevel === "caution" ? "#ffd60a" : "#00d1ff";
+                  return (
+                    <div className="kv" style={{
+                      padding: 8,
+                      background: "rgba(255,255,255,0.05)",
+                      borderRadius: 8,
+                      borderLeft: `3px solid ${alertColor}`,
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>
+                          {ac.callsign || ac.id}
+                        </div>
+                        <span
+                          style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: "0 2px" }}
+                          onClick={() => setSelectedAircraft(null)}
+                        >
+                          dismiss
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>
+                        ADS-B Aircraft
+                      </div>
+                      <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 13 }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Altitude</div>
+                          <div style={{ fontWeight: 600 }}>{Math.round(ac.altFt).toLocaleString()} ft{vertChar}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Speed</div>
+                          <div style={{ fontWeight: 600 }}>{Math.round(ac.speedKts)} kts</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Heading</div>
+                          <div style={{ fontWeight: 600 }}>{Math.round(ac.headingDeg)}&deg;</div>
+                        </div>
+                      </div>
+                      {ac._distNm != null && (
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 6 }}>
+                          Distance: {ac._distNm.toFixed(1)} nm
+                        </div>
+                      )}
+                      {ac.vertRateFpm != null && Math.abs(ac.vertRateFpm) > 50 && (
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>
+                          Vertical rate: {ac.vertRateFpm > 0 ? "+" : ""}{Math.round(ac.vertRateFpm)} fpm
+                        </div>
+                      )}
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>
+                        Category: {ac.category || "Unknown"}
+                      </div>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>
+                        ICAO: {ac.id} | {ac.lat.toFixed(5)}, {ac.lon.toFixed(5)}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Selected drone detail */}
+                {selectedDrone && (() => {
+                  const drone = sortedDrones.find((d) => d.id === selectedDrone);
+                  if (!drone) return null;
+                  const vertChar = drone.vertRateFpm
+                    ? drone.vertRateFpm > 100 ? "\u2191" : drone.vertRateFpm < -100 ? "\u2193" : ""
+                    : "";
+                  const idLabel = drone.serialNumber ?? drone.sessionId ?? drone.id;
+                  return (
+                    <div className="kv" style={{
+                      padding: 8,
+                      background: "rgba(255,255,255,0.05)",
+                      borderRadius: 8,
+                      borderLeft: "3px solid #ffa500",
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>
+                          {idLabel.length > 20 ? idLabel.slice(0, 20) + "\u2026" : idLabel}
+                        </div>
+                        <span
+                          style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: "0 2px" }}
+                          onClick={() => setSelectedDrone(null)}
+                        >
+                          dismiss
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>
+                        Remote ID Drone
+                      </div>
+                      <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 13 }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Altitude</div>
+                          <div style={{ fontWeight: 600 }}>{Math.round(drone.altFt)} ft{vertChar}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Speed</div>
+                          <div style={{ fontWeight: 600 }}>{Math.round(drone.speedKts)} kts</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Heading</div>
+                          <div style={{ fontWeight: 600 }}>{Math.round(drone.headingDeg)}&deg;</div>
+                        </div>
+                      </div>
+                      {drone._distNm != null && (
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 6 }}>
+                          Distance: {drone._distNm.toFixed(1)} nm
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: 6, fontSize: 10, color: "rgba(255,255,255,0.45)", marginTop: 6, flexWrap: "wrap" }}>
+                        <span style={{ padding: "1px 5px", borderRadius: 4, background: "rgba(255,255,255,0.08)" }}>
+                          {drone.ridType === "standard" ? "Standard RID" : "Broadcast Module"}
+                        </span>
+                        <span style={{ padding: "1px 5px", borderRadius: 4, background: "rgba(255,255,255,0.08)" }}>
+                          {broadcastTypeLabel(drone.broadcastType)}
+                        </span>
+                        <span style={{ padding: "1px 5px", borderRadius: 4, background: "rgba(255,255,255,0.08)" }}>
+                          {drone.operationalStatus}
+                        </span>
+                      </div>
+                      {(drone.operatorLat != null || drone.takeoffLat != null) && (
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 4 }}>
+                          {drone.operatorLat != null
+                            ? `Operator: ${drone.operatorLat!.toFixed(5)}, ${drone.operatorLon!.toFixed(5)}`
+                            : `Takeoff: ${drone.takeoffLat!.toFixed(5)}, ${drone.takeoffLon!.toFixed(5)}`}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>
+                        {drone.lat.toFixed(5)}, {drone.lon.toFixed(5)}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Nothing selected state */}
+                {!selectedFaaZone && !selectedObstruction && !selectedAircraft && !selectedDrone && (
+                  <div style={{ textAlign: "center", padding: "24px 12px" }}>
+                    <p className="smallMuted" style={{ fontSize: 12 }}>
+                      No item selected
+                    </p>
+                    <p className="smallMuted" style={{ fontSize: 11, marginTop: 8 }}>
+                      Tap an airspace zone, obstruction, aircraft, or drone on the map to view its details here.
+                    </p>
                   </div>
                 )}
               </div>
@@ -1749,7 +1942,15 @@ export default function App() {
                 {sortedAircraft.length > 0 && (
                   <div className="list">
                     {sortedAircraft.map((ac) => (
-                      <AircraftCard key={ac.id} aircraft={ac} distNm={ac._distNm} alertLevel={ac._alertLevel} />
+                      <div key={ac.id} style={{ cursor: "pointer" }} onClick={() => {
+                        setSelectedAircraft(ac.id);
+                        setSelectedFaaZone(null);
+                        setSelectedObstruction(null);
+                        setSelectedDrone(null);
+                        setPanelTab("details");
+                      }}>
+                        <AircraftCard aircraft={ac} distNm={ac._distNm} alertLevel={ac._alertLevel} />
+                      </div>
                     ))}
                   </div>
                 )}
@@ -1887,7 +2088,15 @@ export default function App() {
                 {sortedDrones.length > 0 && (
                   <div className="list">
                     {sortedDrones.map((d) => (
-                      <DroneCard key={d.id} drone={d} distNm={d._distNm} />
+                      <div key={d.id} style={{ cursor: "pointer" }} onClick={() => {
+                        setSelectedDrone(d.id);
+                        setSelectedFaaZone(null);
+                        setSelectedObstruction(null);
+                        setSelectedAircraft(null);
+                        setPanelTab("details");
+                      }}>
+                        <DroneCard drone={d} distNm={d._distNm} />
+                      </div>
                     ))}
                   </div>
                 )}
@@ -1960,11 +2169,13 @@ export default function App() {
                 </div>
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>FAA Airspace (FAA Tab)</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>FAA Airspace (Maps Tab)</div>
                   <p className="smallMuted">
                     Toggle FAA airspace classes (B/C/D/E), TFRs, restricted areas,
-                    security zones, and LAANC grid overlays. Data is fetched live
-                    from FAA ArcGIS services. Always check NOTAMs before flight.
+                    security zones, and LAANC grid overlays from the Maps tab. Data
+                    is fetched live from FAA ArcGIS services. Tap any airspace zone,
+                    obstruction, aircraft, or drone to see details on the Details tab.
+                    Always check NOTAMs before flight.
                   </p>
                 </div>
 

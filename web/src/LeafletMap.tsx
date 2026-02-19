@@ -278,13 +278,14 @@ export default function LeafletMap({
           });
           marker = L.marker([a.lat, a.lon], { icon, interactive: false }).addTo(map);
         } else if (a.style === "obstruction") {
+          const clr = a.color ?? "#fb923c";
           icon = L.divIcon({
-            html: `<div style="width:10px;height:10px;color:${a.color ?? "#fb923c"};font-size:10px;line-height:10px;text-align:center;">\u25B2</div>`,
+            html: `<svg width="8" height="8" viewBox="0 0 8 8"><polygon points="4,0 8,8 0,8" fill="${clr}"/></svg>`,
             className: "",
-            iconSize: [10, 10],
-            iconAnchor: [5, 5],
+            iconSize: [8, 8],
+            iconAnchor: [4, 4],
           });
-          marker = L.marker([a.lat, a.lon], { icon, interactive: false }).addTo(map);
+          marker = L.marker([a.lat, a.lon], { icon, interactive: !!onSelect }).addTo(map);
         } else if (a.style === "seamark") {
           const canvas = createSeamarkIcon(a.color ?? "#ff3b30");
           const url = canvas.toDataURL();

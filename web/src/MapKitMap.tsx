@@ -463,13 +463,23 @@ export default function MapKitMap({
             calloutEnabled: false,
           });
         } else if (a.style === "obstruction") {
-          // Small orange triangle for obstructions (towers, antennas)
-          annotation = new mapkit.MarkerAnnotation(coord, {
-            title: a.title,
-            subtitle: a.subtitle,
+          // Tiny orange triangle for obstructions — no labels
+          const sz = 8;
+          const c = document.createElement("canvas");
+          c.width = sz; c.height = sz;
+          const ctx = c.getContext("2d")!;
+          ctx.fillStyle = a.color ?? "#fb923c";
+          ctx.beginPath();
+          ctx.moveTo(sz / 2, 0);
+          ctx.lineTo(sz, sz);
+          ctx.lineTo(0, sz);
+          ctx.closePath();
+          ctx.fill();
+          annotation = new mapkit.ImageAnnotation(coord, {
             data: { id: a.id, style: a.style },
-            glyphText: "\u25B2",
-            color: a.color ?? "#fb923c",
+            url: { 1: c.toDataURL() },
+            size: { width: sz, height: sz },
+            anchorOffset: new DOMPoint(0, -sz / 2),
             calloutEnabled: false,
           });
         } else {
