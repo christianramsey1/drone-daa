@@ -93,6 +93,47 @@ function loadAlertVolumes(): AlertVolumeSettings {
   return DEFAULT_ALERT_VOLUMES;
 }
 
+// ── Center source for range rings / distance calculations ─────────────
+
+type CenterSourceKind =
+  | "deviceGps"         // This device's GPS
+  | "gdl90Gps"          // GDL-90 receiver's ownship GPS
+  | "ridDrone"           // A specific RID drone's position
+  | "tapMap";            // User tapped map location
+
+type CenterSourceConfig = {
+  kind: CenterSourceKind;
+  ridDroneId?: string;   // Only when kind === "ridDrone"
+};
+
+type CenterSourceSettings = {
+  primary: CenterSourceConfig;
+  secondary: CenterSourceConfig;
+  // Tertiary is always "tapMap" (not user-selectable)
+};
+
+const DEFAULT_CENTER_SOURCE: CenterSourceSettings = {
+  primary: { kind: "deviceGps" },
+  secondary: { kind: "tapMap" },
+};
+
+const CENTER_SOURCE_KEY = "dronedaa.centerSource";
+
+function loadCenterSource(): CenterSourceSettings {
+  try {
+    const stored = localStorage.getItem(CENTER_SOURCE_KEY);
+    if (stored) return { ...DEFAULT_CENTER_SOURCE, ...JSON.parse(stored) };
+  } catch { /* ignore */ }
+  return DEFAULT_CENTER_SOURCE;
+}
+
+const CENTER_SOURCE_LABELS: Record<CenterSourceKind, string> = {
+  deviceGps: "This Device GPS",
+  gdl90Gps: "GDL-90 Receiver GPS",
+  ridDrone: "My Drone (RID)",
+  tapMap: "Tap Map to Set",
+};
+
 type AlertLevel = "normal" | "caution" | "warning";
 
 function computeAlertLevel(
@@ -509,6 +550,14 @@ export default function App() {
   // Remote ID
   const rid = useRemoteId();
 
+  // Center source for range rings / distance calculations
+  const [centerSource, setCenterSource] = useState<CenterSourceSettings>(loadCenterSource);
+  const [tapMapPos, setTapMapPos] = useState<{ lat: number; lon: number } | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(CENTER_SOURCE_KEY, JSON.stringify(centerSource));
+  }, [centerSource]);
+
   // Map layer
   const [mapLayer, setMapLayer] = useState<MapLayer>(loadMapLayer);
 
@@ -621,22 +670,66 @@ export default function App() {
     return () => { cancelled = true; };
   }, [gps?.lat?.toFixed(2), gps?.lon?.toFixed(2), mapCenter?.lat, mapCenter?.lon]);
 
+  // ── Resolved center (3-tier fallback) ─────────────────────────────
+
+  const resolveSource = (src: CenterSourceConfig): { lat: number; lon: number } | null => {
+    switch (src.kind) {
+      case "deviceGps":
+        return gps ? { lat: gps.lat, lon: gps.lon } : null;
+      case "gdl90Gps":
+        return adsb.ownship ? { lat: adsb.ownship.lat, lon: adsb.ownship.lon } : null;
+      case "ridDrone": {
+        if (!src.ridDroneId) return null;
+        const drone = rid.drones.find((d) => d.id === src.ridDroneId);
+        return drone ? { lat: drone.lat, lon: drone.lon } : null;
+      }
+      case "tapMap":
+        return tapMapPos ?? (gps ? { lat: gps.lat, lon: gps.lon } : null);
+      default:
+        return null;
+    }
+  };
+
+  // Resolve with fallback: primary → secondary → tertiary (tapMap)
+  const resolvedCenter: { lat: number; lon: number } | null = useMemo(() => {
+    return resolveSource(centerSource.primary)
+      ?? resolveSource(centerSource.secondary)
+      ?? resolveSource({ kind: "tapMap" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    centerSource.primary.kind, centerSource.primary.ridDroneId,
+    centerSource.secondary.kind, centerSource.secondary.ridDroneId,
+    gps?.lat, gps?.lon,
+    adsb.ownship?.lat, adsb.ownship?.lon,
+    rid.drones,
+    tapMapPos?.lat, tapMapPos?.lon,
+  ]);
+
+  // Track which tier is active (for display)
+  const activeCenterTier: "primary" | "secondary" | "tertiary" = useMemo(() => {
+    if (resolveSource(centerSource.primary)) return "primary";
+    if (resolveSource(centerSource.secondary)) return "secondary";
+    return "tertiary";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedCenter]);
+
   // ── Sorted aircraft by distance ──────────────────────────────────
 
   type AircraftWithDist = AircraftTrack & { _distNm?: number; _alertLevel: AlertLevel };
 
   const sortedAircraft: AircraftWithDist[] = useMemo(() => {
+    const center = resolvedCenter;
     const list: AircraftWithDist[] = adsb.aircraft.map((ac) => {
-      const d = gps ? distanceNm(gps, ac) : undefined;
+      const d = center ? distanceNm(center, ac) : undefined;
       return {
         ...ac,
         _distNm: d,
         _alertLevel: computeAlertLevel(d, ac.altFt, alertVolumes),
       };
     });
-    if (gps) list.sort((a, b) => (a._distNm ?? 99999) - (b._distNm ?? 99999));
+    if (center) list.sort((a, b) => (a._distNm ?? 99999) - (b._distNm ?? 99999));
     return list;
-  }, [adsb.aircraft, gps?.lat, gps?.lon, alertVolumes]);
+  }, [adsb.aircraft, resolvedCenter, alertVolumes]);
 
   // ── Position history for breadcrumbs ───────────────────────────────
 
@@ -772,8 +865,9 @@ export default function App() {
       }
     }
 
-    // Range rings (centered on GPS)
-    if (gps) {
+    // Range rings (centered on resolvedCenter)
+    const center = resolvedCenter;
+    if (center) {
       // Determine active alert states for ring fills
       const hasWarning = sortedAircraft.some((ac) => ac._alertLevel === "warning");
       const hasCaution = sortedAircraft.some((ac) => ac._alertLevel === "caution" || ac._alertLevel === "warning");
@@ -781,7 +875,7 @@ export default function App() {
       if (alertVolumes.outerEnabled) {
         lines.push({
           id: "ring-outer",
-          points: circlePolyPoints(gps, alertVolumes.outerRangeNm),
+          points: circlePolyPoints(center, alertVolumes.outerRangeNm),
           width: 4,
           opacity: 0.9,
           color: "#ffd60a",
@@ -793,7 +887,7 @@ export default function App() {
       if (alertVolumes.innerEnabled) {
         lines.push({
           id: "ring-inner",
-          points: circlePolyPoints(gps, alertVolumes.innerRangeNm),
+          points: circlePolyPoints(center, alertVolumes.innerRangeNm),
           width: 4,
           opacity: 0.9,
           color: "#ff453a",
@@ -805,7 +899,7 @@ export default function App() {
     }
 
     return lines;
-  }, [sortedAircraft, aircraftDisplay.velocityVector, gps?.lat, gps?.lon, alertVolumes]);
+  }, [sortedAircraft, aircraftDisplay.velocityVector, resolvedCenter, alertVolumes]);
 
   // ── FAA airspace polylines ───────────────────────────────────────
 
@@ -821,25 +915,19 @@ export default function App() {
     }));
   }, [faa.zones]);
 
-  // ── Merged polylines for map ──────────────────────────────────────
-
-  const allMapPolylines: Polyline[] = useMemo(() => [
-    ...mapPolylines,
-    ...faaPolylines,
-  ], [mapPolylines, faaPolylines]);
-
   // ── Sorted drones by distance ─────────────────────────────────────
 
   type DroneWithDist = DroneTrack & { _distNm?: number };
 
   const sortedDrones: DroneWithDist[] = useMemo(() => {
+    const center = resolvedCenter;
     const list: DroneWithDist[] = rid.drones.map((d) => {
-      const dist = gps ? distanceNm(gps, d) : undefined;
+      const dist = center ? distanceNm(center, d) : undefined;
       return { ...d, _distNm: dist };
     });
-    if (gps) list.sort((a, b) => (a._distNm ?? 99999) - (b._distNm ?? 99999));
+    if (center) list.sort((a, b) => (a._distNm ?? 99999) - (b._distNm ?? 99999));
     return list;
-  }, [rid.drones, gps?.lat, gps?.lon]);
+  }, [rid.drones, resolvedCenter]);
 
   // ── Drone annotations for map ─────────────────────────────────────
 
@@ -879,6 +967,38 @@ export default function App() {
     return result;
   }, [sortedDrones]);
 
+  // ── Drone-to-operator/takeoff connecting lines ───────────────────
+
+  const droneOperatorLines: Polyline[] = useMemo(() => {
+    const lines: Polyline[] = [];
+    for (const drone of sortedDrones) {
+      const opLat = drone.operatorLat ?? drone.takeoffLat;
+      const opLon = drone.operatorLon ?? drone.takeoffLon;
+      if (opLat != null && opLon != null) {
+        lines.push({
+          id: `rid-link-${drone.id}`,
+          points: [
+            { lat: drone.lat, lon: drone.lon },
+            { lat: opLat, lon: opLon },
+          ],
+          width: 1.5,
+          opacity: 0.5,
+          color: "#ffa500",
+          dashed: true,
+        });
+      }
+    }
+    return lines;
+  }, [sortedDrones]);
+
+  // ── Merged polylines for map ──────────────────────────────────────
+
+  const allMapPolylines: Polyline[] = useMemo(() => [
+    ...mapPolylines,
+    ...faaPolylines,
+    ...droneOperatorLines,
+  ], [mapPolylines, faaPolylines, droneOperatorLines]);
+
   // ── Merged annotations for map ────────────────────────────────────
 
   const allMapAnnotations: Annotation[] = useMemo(() => [
@@ -906,6 +1026,7 @@ export default function App() {
             onViewChange={(_zoom, bounds) => {
               setMapBbox(bounds);
             }}
+            onMapClick={(lat, lon) => setTapMapPos({ lat, lon })}
           />
         ) : (
           <Suspense fallback={<div style={{ background: "#1a1a1a", width: "100%", height: "100%" }} />}>
@@ -918,6 +1039,7 @@ export default function App() {
                 setLeafletView({ zoom, bounds });
                 setMapBbox(bounds);
               }}
+              onMapClick={(lat, lon) => setTapMapPos({ lat, lon })}
             />
           </Suspense>
         )}
@@ -1069,6 +1191,72 @@ export default function App() {
 
             {panelTab === "alerts" && (
               <div className="panelSection">
+                {/* ── Center Source ── */}
+                <div className="sectionTitle">Ring Center</div>
+                <p className="smallMuted">
+                  Select sources for centering range rings. Falls back through tiers
+                  if a source is unavailable.
+                </p>
+
+                {(["primary", "secondary"] as const).map((tier) => {
+                  const src = centerSource[tier];
+                  const tierLabel = tier === "primary" ? "Primary" : "Secondary";
+                  return (
+                    <div className="row" key={tier} style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}>
+                      <span className="smallMuted" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>
+                        {tierLabel}
+                        {activeCenterTier === tier && (
+                          <span style={{ color: "#30d158", marginLeft: 6, textTransform: "none", letterSpacing: 0 }}>Active</span>
+                        )}
+                      </span>
+                      <select
+                        style={{
+                          background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+                          borderRadius: 8, color: "white", padding: "6px 8px", fontSize: 12, width: "100%",
+                        }}
+                        value={src.kind === "ridDrone" ? `ridDrone:${src.ridDroneId ?? ""}` : src.kind}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          let config: CenterSourceConfig;
+                          if (val.startsWith("ridDrone:")) {
+                            config = { kind: "ridDrone", ridDroneId: val.slice(9) };
+                          } else {
+                            config = { kind: val as CenterSourceKind };
+                          }
+                          setCenterSource((s) => ({ ...s, [tier]: config }));
+                        }}
+                      >
+                        <option value="deviceGps">{CENTER_SOURCE_LABELS.deviceGps}</option>
+                        <option value="gdl90Gps">{CENTER_SOURCE_LABELS.gdl90Gps}</option>
+                        {rid.drones.map((d) => (
+                          <option key={d.id} value={`ridDrone:${d.id}`}>
+                            Drone: {(d.serialNumber ?? d.sessionId ?? d.id).slice(0, 16)}
+                          </option>
+                        ))}
+                        <option value="tapMap">{CENTER_SOURCE_LABELS.tapMap}</option>
+                      </select>
+                    </div>
+                  );
+                })}
+
+                <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}>
+                  <span className="smallMuted" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>
+                    Tertiary (fallback)
+                    {activeCenterTier === "tertiary" && (
+                      <span style={{ color: "#30d158", marginLeft: 6, textTransform: "none", letterSpacing: 0 }}>Active</span>
+                    )}
+                  </span>
+                  <span className="smallMuted">{CENTER_SOURCE_LABELS.tapMap}</span>
+                </div>
+
+                {resolvedCenter && (
+                  <div className="smallMuted" style={{ marginTop: 4 }}>
+                    Center: {resolvedCenter.lat.toFixed(4)}, {resolvedCenter.lon.toFixed(4)}
+                  </div>
+                )}
+
+                <div className="divider" />
+
                 <div className="sectionTitle">Alert Volumes</div>
 
                 {/* Outer Ring (Caution) */}
@@ -1299,6 +1487,11 @@ export default function App() {
             {panelTab === "weather" && (
               <div className="panelSection">
                 <div className="sectionTitle">Weather</div>
+                {resolvedCenter && (
+                  <p className="smallMuted" style={{ marginBottom: 6 }}>
+                    Location: {resolvedCenter.lat.toFixed(4)}, {resolvedCenter.lon.toFixed(4)}
+                  </p>
+                )}
 
                 {weatherLoading && !weather ? (
                   <p className="smallMuted">Loading weather...</p>
@@ -1759,7 +1952,7 @@ export default function App() {
         )}
 
         {/* Remote ID pill */}
-        {rid.count > 0 && (
+        {(rid.status === "scanning" || rid.status === "receiving" || rid.count > 0) && (
           <div
             className="pill"
             onClick={() => { setPanelTab("remoteid"); setPanelOpen(true); }}
@@ -1768,7 +1961,7 @@ export default function App() {
             <span style={{
               display: "inline-block",
               width: 6, height: 6, borderRadius: 3,
-              backgroundColor: "#30d158",
+              backgroundColor: rid.count > 0 ? "#30d158" : "#ffd60a",
               marginRight: 6,
             }} />
             <span>{rid.count} drone{rid.count !== 1 ? "s" : ""}</span>
