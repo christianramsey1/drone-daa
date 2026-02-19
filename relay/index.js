@@ -49,12 +49,17 @@ udp.on("message", (msg) => {
         aircraft.set(track.id, track);
       }
     } else if (msgId === 0x0A) {
-      // Ownship report
+      // Ownship report — only update position if GPS fix is valid (non-zero)
       const own = parseTrafficReport(payload);
       if (own) {
         own.lastSeen = Date.now();
         own.timestamp = Date.now();
-        ownship = own;
+        if (own.lat !== 0 && own.lon !== 0) {
+          ownship = own;
+        } else if (ownship) {
+          // No GPS fix — keep existing ownship alive but mark as stale-position
+          ownship.lastSeen = Date.now();
+        }
       }
     } else if (msgId === 0x0B) {
       // Ownship geometric altitude

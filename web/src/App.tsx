@@ -17,7 +17,7 @@ const LeafletMap = lazy(() => import("./LeafletMap"));
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-type PanelTab = "maps" | "alerts" | "flights" | "faa" | "weather" | "settings" | "remoteid" | "howto";
+type PanelTab = "maps" | "alerts" | "adsb" | "remoteid" | "faa" | "weather" | "settings" | "howto";
 
 type MapLayer = "apple" | "topo";
 
@@ -543,6 +543,7 @@ export default function App() {
 
   // FAA layers
   const faa = useFaaLayers(mapBbox);
+  const [vfrSectionalEnabled, setVfrSectionalEnabled] = useState(false);
 
   // Selected FAA zone (for TFR details etc.)
   const [selectedFaaZone, setSelectedFaaZone] = useState<import("./services/airspace").AirspaceZone | null>(null);
@@ -672,19 +673,25 @@ export default function App() {
 
   // ── Resolved center (3-tier fallback) ─────────────────────────────
 
+  const isValidCoord = (lat: number, lon: number): boolean =>
+    lat !== 0 && lon !== 0 && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+
   const resolveSource = (src: CenterSourceConfig): { lat: number; lon: number } | null => {
     switch (src.kind) {
       case "deviceGps":
-        return gps ? { lat: gps.lat, lon: gps.lon } : null;
+        return gps && isValidCoord(gps.lat, gps.lon) ? { lat: gps.lat, lon: gps.lon } : null;
       case "gdl90Gps":
-        return adsb.ownship ? { lat: adsb.ownship.lat, lon: adsb.ownship.lon } : null;
+        return adsb.ownship && isValidCoord(adsb.ownship.lat, adsb.ownship.lon)
+          ? { lat: adsb.ownship.lat, lon: adsb.ownship.lon } : null;
       case "ridDrone": {
         if (!src.ridDroneId) return null;
         const drone = rid.drones.find((d) => d.id === src.ridDroneId);
-        return drone ? { lat: drone.lat, lon: drone.lon } : null;
+        return drone && isValidCoord(drone.lat, drone.lon)
+          ? { lat: drone.lat, lon: drone.lon } : null;
       }
       case "tapMap":
-        return tapMapPos ?? (gps ? { lat: gps.lat, lon: gps.lon } : null);
+        if (tapMapPos && isValidCoord(tapMapPos.lat, tapMapPos.lon)) return tapMapPos;
+        return gps && isValidCoord(gps.lat, gps.lon) ? { lat: gps.lat, lon: gps.lon } : null;
       default:
         return null;
     }
@@ -1001,15 +1008,47 @@ export default function App() {
 
   // ── Merged annotations for map ────────────────────────────────────
 
+  // ── Obstruction annotations ──────────────────────────────────────
+  const obstructionAnnotations: Annotation[] = useMemo(() => {
+    return faa.obstructions.map((obs) => ({
+      id: obs.id,
+      lat: obs.lat,
+      lon: obs.lon,
+      title: `${obs.typeCode} ${obs.aglFt} ft AGL`,
+      subtitle: obs.city ? `${obs.city}, ${obs.state}` : undefined,
+      style: "obstruction",
+      color: "#fb923c",
+    }));
+  }, [faa.obstructions]);
+
   const allMapAnnotations: Annotation[] = useMemo(() => [
     ...mapAnnotations,
     ...droneAnnotations,
-  ], [mapAnnotations, droneAnnotations]);
+    ...obstructionAnnotations,
+  ], [mapAnnotations, droneAnnotations, obstructionAnnotations]);
+
+  // ── Tile overlays (VFR Sectional chart) ─────────────────────────
+  const VFR_SECTIONAL_URL = "https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}";
+  const mapTileOverlays: import("./MapKitMap").TileOverlayConfig[] = useMemo(() => {
+    if (!vfrSectionalEnabled) return [];
+    return [{ id: "vfr-sectional", urlTemplate: VFR_SECTIONAL_URL, opacity: 0.7 }];
+  }, [vfrSectionalEnabled]);
 
   // ── Derived ─────────────────────────────────────────────────────
 
   const emoji = conditionEmoji(weather?.conditionCode, weather?.daylight);
   const condText = conditionLabel(weather?.conditionCode);
+
+  // ── Overlay click → select FAA zone ─────────────────────────────
+  const handleOverlaySelect = (overlayId: string) => {
+    if (!overlayId.startsWith("faa-")) return;
+    const zoneId = overlayId.slice(4); // strip "faa-" prefix
+    const zone = faa.zones.find((z) => z.id === zoneId);
+    if (zone) {
+      setSelectedFaaZone((prev) => prev?.id === zone.id ? null : zone);
+      setPanelTab("faa");
+    }
+  };
 
   // ── Render ──────────────────────────────────────────────────────
 
@@ -1023,10 +1062,12 @@ export default function App() {
             center={mapCenter ?? undefined}
             annotations={allMapAnnotations}
             polylines={allMapPolylines}
+            tileOverlays={mapTileOverlays}
             onViewChange={(_zoom, bounds) => {
               setMapBbox(bounds);
             }}
             onMapClick={(lat, lon) => setTapMapPos({ lat, lon })}
+            onOverlaySelect={handleOverlaySelect}
           />
         ) : (
           <Suspense fallback={<div style={{ background: "#1a1a1a", width: "100%", height: "100%" }} />}>
@@ -1035,11 +1076,13 @@ export default function App() {
               center={mapCenter ?? undefined}
               annotations={allMapAnnotations}
               polylines={allMapPolylines}
+              tileOverlays={mapTileOverlays}
               onViewChange={(zoom, bounds) => {
                 setLeafletView({ zoom, bounds });
                 setMapBbox(bounds);
               }}
               onMapClick={(lat, lon) => setTapMapPos({ lat, lon })}
+              onOverlaySelect={handleOverlaySelect}
             />
           </Suspense>
         )}
@@ -1067,13 +1110,13 @@ export default function App() {
           {/* Tabs */}
           <div className="panelTabs">
             <div className="tabRow">
-              {([["maps", "Maps"], ["alerts", "Alerts"], ["flights", "Flights"], ["faa", "FAA"]] as const).map(([id, label]) => (
+              {([["maps", "Maps"], ["alerts", "Alerts"], ["adsb", "ADS-B"], ["remoteid", "Remote ID"]] as const).map(([id, label]) => (
                 <button key={id} className={`tabBtn ${panelTab === id ? "active" : ""}`}
                   onClick={() => setPanelTab(id)}>{label}</button>
               ))}
             </div>
             <div className="tabRow">
-              {([["weather", "Weather"], ["settings", "Settings"], ["remoteid", "Remote ID"], ["howto", "How To"]] as const).map(([id, label]) => (
+              {([["faa", "FAA"], ["weather", "Weather"], ["settings", "Settings"], ["howto", "How To"]] as const).map(([id, label]) => (
                 <button key={id} className={`tabBtn ${panelTab === id ? "active" : ""}`}
                   onClick={() => setPanelTab(id)}>{label}</button>
               ))}
@@ -1191,7 +1234,123 @@ export default function App() {
 
             {panelTab === "alerts" && (
               <div className="panelSection">
-                {/* ── Center Source ── */}
+                {/* ── Notifications (top) ── */}
+                <div className="sectionTitle">Notifications</div>
+                <div className="row">
+                  <span className="rowTitle">Alert Sound</span>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={alertVolumes.soundEnabled}
+                      onChange={() => setAlertVolumes((s) => ({ ...s, soundEnabled: !s.soundEnabled }))}
+                    />
+                    <span className="slider" />
+                  </label>
+                </div>
+                <div className="row">
+                  <span className="rowTitle">Alert Haptic</span>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={alertVolumes.hapticEnabled}
+                      onChange={() => setAlertVolumes((s) => ({ ...s, hapticEnabled: !s.hapticEnabled }))}
+                    />
+                    <span className="slider" />
+                  </label>
+                </div>
+
+                <div className="divider" />
+
+                {/* ── Alert Volumes ── */}
+                <div className="sectionTitle">Alert Volumes</div>
+
+                {/* Outer Ring (Caution) */}
+                <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span className="rowTitle" style={{ color: "#ffd60a" }}>Outer Ring (Caution)</span>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={alertVolumes.outerEnabled}
+                        onChange={() => setAlertVolumes((s) => ({ ...s, outerEnabled: !s.outerEnabled }))}
+                      />
+                      <span className="slider" />
+                    </label>
+                  </div>
+                  {alertVolumes.outerEnabled && (
+                    <>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span className="smallMuted">Range</span>
+                        <span className="smallMuted">{alertVolumes.outerRangeNm} nm</span>
+                      </div>
+                      <input
+                        type="range" min={0.5} max={15} step={0.5}
+                        value={alertVolumes.outerRangeNm}
+                        onChange={(e) => setAlertVolumes((s) => {
+                          const v = Number(e.target.value);
+                          return { ...s, outerRangeNm: v, innerRangeNm: Math.min(s.innerRangeNm, v) };
+                        })}
+                        className="settingsRange"
+                      />
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span className="smallMuted">Ceiling</span>
+                        <span className="smallMuted">{alertVolumes.outerCeilingFt.toLocaleString()} ft</span>
+                      </div>
+                      <input
+                        type="range" min={500} max={30000} step={500}
+                        value={alertVolumes.outerCeilingFt}
+                        onChange={(e) => setAlertVolumes((s) => {
+                          const v = Number(e.target.value);
+                          return { ...s, outerCeilingFt: v, innerCeilingFt: Math.min(s.innerCeilingFt, v) };
+                        })}
+                        className="settingsRange"
+                      />
+                    </>
+                  )}
+                </div>
+
+                {/* Inner Ring (Warning) */}
+                <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span className="rowTitle" style={{ color: "#ff453a" }}>Inner Ring (Warning)</span>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={alertVolumes.innerEnabled}
+                        onChange={() => setAlertVolumes((s) => ({ ...s, innerEnabled: !s.innerEnabled }))}
+                      />
+                      <span className="slider" />
+                    </label>
+                  </div>
+                  {alertVolumes.innerEnabled && (
+                    <>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span className="smallMuted">Range</span>
+                        <span className="smallMuted">{alertVolumes.innerRangeNm} nm</span>
+                      </div>
+                      <input
+                        type="range" min={0.5} max={alertVolumes.outerRangeNm} step={0.5}
+                        value={alertVolumes.innerRangeNm}
+                        onChange={(e) => setAlertVolumes((s) => ({ ...s, innerRangeNm: Math.min(Number(e.target.value), s.outerRangeNm) }))}
+                        className="settingsRange"
+                      />
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span className="smallMuted">Ceiling</span>
+                        <span className="smallMuted">{alertVolumes.innerCeilingFt.toLocaleString()} ft</span>
+                      </div>
+                      <input
+                        type="range" min={500} max={alertVolumes.outerCeilingFt} step={500}
+                        value={alertVolumes.innerCeilingFt}
+                        onChange={(e) => setAlertVolumes((s) => ({ ...s, innerCeilingFt: Math.min(Number(e.target.value), s.outerCeilingFt) }))}
+                        className="settingsRange"
+                      />
+                    </>
+                  )}
+                </div>
+
+                <div className="divider" />
+
+                {/* ── Ring Center ── */}
                 <div className="sectionTitle">Ring Center</div>
                 <p className="smallMuted">
                   Select sources for centering range rings. Falls back through tiers
@@ -1254,115 +1413,6 @@ export default function App() {
                     Center: {resolvedCenter.lat.toFixed(4)}, {resolvedCenter.lon.toFixed(4)}
                   </div>
                 )}
-
-                <div className="divider" />
-
-                <div className="sectionTitle">Alert Volumes</div>
-
-                {/* Outer Ring (Caution) */}
-                <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span className="rowTitle" style={{ color: "#ffd60a" }}>Outer Ring (Caution)</span>
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={alertVolumes.outerEnabled}
-                        onChange={() => setAlertVolumes((s) => ({ ...s, outerEnabled: !s.outerEnabled }))}
-                      />
-                      <span className="slider" />
-                    </label>
-                  </div>
-                  {alertVolumes.outerEnabled && (
-                    <>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span className="smallMuted">Range</span>
-                        <span className="smallMuted">{alertVolumes.outerRangeNm} nm</span>
-                      </div>
-                      <input
-                        type="range" min={1} max={10} step={0.5}
-                        value={alertVolumes.outerRangeNm}
-                        onChange={(e) => setAlertVolumes((s) => ({ ...s, outerRangeNm: Number(e.target.value) }))}
-                        className="settingsRange"
-                      />
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span className="smallMuted">Ceiling</span>
-                        <span className="smallMuted">{alertVolumes.outerCeilingFt.toLocaleString()} ft</span>
-                      </div>
-                      <input
-                        type="range" min={500} max={10000} step={500}
-                        value={alertVolumes.outerCeilingFt}
-                        onChange={(e) => setAlertVolumes((s) => ({ ...s, outerCeilingFt: Number(e.target.value) }))}
-                        className="settingsRange"
-                      />
-                    </>
-                  )}
-                </div>
-
-                {/* Inner Ring (Warning) */}
-                <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span className="rowTitle" style={{ color: "#ff453a" }}>Inner Ring (Warning)</span>
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={alertVolumes.innerEnabled}
-                        onChange={() => setAlertVolumes((s) => ({ ...s, innerEnabled: !s.innerEnabled }))}
-                      />
-                      <span className="slider" />
-                    </label>
-                  </div>
-                  {alertVolumes.innerEnabled && (
-                    <>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span className="smallMuted">Range</span>
-                        <span className="smallMuted">{alertVolumes.innerRangeNm} nm</span>
-                      </div>
-                      <input
-                        type="range" min={0.5} max={5} step={0.5}
-                        value={alertVolumes.innerRangeNm}
-                        onChange={(e) => setAlertVolumes((s) => ({ ...s, innerRangeNm: Number(e.target.value) }))}
-                        className="settingsRange"
-                      />
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span className="smallMuted">Ceiling</span>
-                        <span className="smallMuted">{alertVolumes.innerCeilingFt.toLocaleString()} ft</span>
-                      </div>
-                      <input
-                        type="range" min={500} max={5000} step={500}
-                        value={alertVolumes.innerCeilingFt}
-                        onChange={(e) => setAlertVolumes((s) => ({ ...s, innerCeilingFt: Number(e.target.value) }))}
-                        className="settingsRange"
-                      />
-                    </>
-                  )}
-                </div>
-
-                <div className="divider" />
-
-                {/* Notifications */}
-                <div className="sectionTitle">Notifications</div>
-                <div className="row">
-                  <span className="rowTitle">Alert Sound</span>
-                  <label className="switch">
-                    <input
-                      type="checkbox"
-                      checked={alertVolumes.soundEnabled}
-                      onChange={() => setAlertVolumes((s) => ({ ...s, soundEnabled: !s.soundEnabled }))}
-                    />
-                    <span className="slider" />
-                  </label>
-                </div>
-                <div className="row">
-                  <span className="rowTitle">Alert Haptic</span>
-                  <label className="switch">
-                    <input
-                      type="checkbox"
-                      checked={alertVolumes.hapticEnabled}
-                      onChange={() => setAlertVolumes((s) => ({ ...s, hapticEnabled: !s.hapticEnabled }))}
-                    />
-                    <span className="slider" />
-                  </label>
-                </div>
               </div>
             )}
 
@@ -1370,6 +1420,29 @@ export default function App() {
               <div className="panelSection">
                 <div className="sectionTitle">FAA Airspace Layers</div>
                 <p className="smallMuted">Toggle layers to display on map. Data from FAA ArcGIS.</p>
+
+                {/* VFR Sectional chart overlay */}
+                <div className="row" style={{ alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                    <div style={{
+                      width: 10, height: 10, borderRadius: 2,
+                      background: "linear-gradient(135deg, #8b5cf6, #3b82f6, #10b981)",
+                      flexShrink: 0,
+                    }} />
+                    <span className="rowTitle">VFR Sectional Chart</span>
+                  </div>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={vfrSectionalEnabled}
+                      onChange={() => setVfrSectionalEnabled((v) => !v)}
+                    />
+                    <span className="slider" />
+                  </label>
+                </div>
+
+                <div className="divider" />
+                <div className="sectionTitle" style={{ fontSize: 11 }}>Airspace &amp; Restriction Layers</div>
 
                 {FAA_LAYERS.map((layer) => (
                   <div className="row" key={layer.id} style={{ alignItems: "center" }}>
@@ -1400,52 +1473,76 @@ export default function App() {
                 )}
 
                 <div className="divider" />
-                <span className="smallMuted">
-                  {faa.zones.length} zones in view
-                </span>
+                {(() => {
+                  const laancCount = faa.zones.filter((z) => z.type === "laanc").length;
+                  const nonLaanc = faa.zones.filter((z) => z.type !== "laanc");
+                  return (
+                    <>
+                      <span className="smallMuted">
+                        {nonLaanc.length} airspace zone{nonLaanc.length !== 1 ? "s" : ""}
+                        {laancCount > 0 ? ` + ${laancCount} LAANC grid cell${laancCount !== 1 ? "s" : ""}` : ""}
+                      </span>
 
-                {/* Zone list — show TFR and LAANC details */}
-                {faa.zones.length > 0 && (
-                  <div className="list" style={{ maxHeight: 200, overflowY: "auto", marginTop: 8 }}>
-                    {faa.zones.slice(0, 50).map((zone) => (
-                      <div
-                        key={zone.id}
-                        className="listItem"
-                        style={{
-                          padding: "4px 8px", fontSize: 11, cursor: "pointer",
-                          background: selectedFaaZone?.id === zone.id ? "rgba(255,255,255,0.1)" : undefined,
-                        }}
-                        onClick={() => setSelectedFaaZone(selectedFaaZone?.id === zone.id ? null : zone)}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <div style={{
-                            width: 6, height: 6, borderRadius: 1,
-                            background: airspaceColor(zone.type),
-                            flexShrink: 0,
-                          }} />
-                          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {zone.name}
-                          </span>
-                          {zone.type === "laanc" && (
-                            <span style={{ color: "#22d3ee", fontWeight: 600, flexShrink: 0 }}>
-                              {zone.ceilingFt < 99999 ? `${zone.ceilingFt} ft` : ""}
-                            </span>
-                          )}
-                          {zone.ceilingFt < 99999 && zone.type !== "laanc" && (
-                            <span className="smallMuted" style={{ flexShrink: 0 }}>
-                              {zone.floorFt}-{zone.ceilingFt} ft
-                            </span>
-                          )}
+                      {/* Zone list — airspace zones (non-LAANC) */}
+                      {nonLaanc.length > 0 && (
+                        <div className="list" style={{ maxHeight: 200, overflowY: "auto", marginTop: 8 }}>
+                          {nonLaanc.slice(0, 50).map((zone) => (
+                            <div
+                              key={zone.id}
+                              className="listItem"
+                              style={{
+                                padding: "4px 8px", fontSize: 11, cursor: "pointer",
+                                background: selectedFaaZone?.id === zone.id ? "rgba(255,255,255,0.1)" : undefined,
+                              }}
+                              onClick={() => setSelectedFaaZone(selectedFaaZone?.id === zone.id ? null : zone)}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <div style={{
+                                  width: 6, height: 6, borderRadius: 1,
+                                  background: airspaceColor(zone.type),
+                                  flexShrink: 0,
+                                }} />
+                                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {zone.name}
+                                </span>
+                                {zone.ceilingFt < 99999 && (
+                                  <span className="smallMuted" style={{ flexShrink: 0 }}>
+                                    {zone.floorFt}-{zone.ceilingFt} ft
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      )}
 
-                {/* Selected zone detail (TFR info etc.) */}
+                      {laancCount > 0 && !selectedFaaZone?.type?.startsWith("laanc") && (
+                        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 6, fontStyle: "italic" }}>
+                          Tap a LAANC grid cell on the map to see its altitude ceiling
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+
+                {/* Selected zone detail */}
                 {selectedFaaZone && (
-                  <div className="kv" style={{ marginTop: 8 }}>
-                    <div style={{ fontWeight: 600, fontSize: 12 }}>{selectedFaaZone.name}</div>
+                  <div className="kv" style={{
+                    marginTop: 8,
+                    padding: 8,
+                    background: "rgba(255,255,255,0.05)",
+                    borderRadius: 8,
+                    borderLeft: `3px solid ${airspaceColor(selectedFaaZone.type)}`,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ fontWeight: 600, fontSize: 12, flex: 1 }}>{selectedFaaZone.name}</div>
+                      <span
+                        style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: "0 2px" }}
+                        onClick={() => setSelectedFaaZone(null)}
+                      >
+                        dismiss
+                      </span>
+                    </div>
                     <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginTop: 4 }}>
                       Type: {selectedFaaZone.type.toUpperCase()}
                       {selectedFaaZone.floorFt > 0 || selectedFaaZone.ceilingFt < 99999
@@ -1475,8 +1572,18 @@ export default function App() {
                       </div>
                     )}
                     {selectedFaaZone.type === "laanc" && (
-                      <div style={{ fontSize: 11, color: "#22d3ee", marginTop: 4 }}>
-                        Max altitude: {selectedFaaZone.ceilingFt < 99999 ? `${selectedFaaZone.ceilingFt} ft AGL` : "Check LAANC"}
+                      <div style={{ marginTop: 6 }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "#22d3ee" }}>
+                          {selectedFaaZone.ceilingFt < 99999 ? `${selectedFaaZone.ceilingFt} ft AGL` : "Check LAANC"}
+                        </div>
+                        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>
+                          Maximum altitude for this LAANC grid cell
+                        </div>
+                        {selectedFaaZone.ceilingFt === 0 && (
+                          <div style={{ fontSize: 11, color: "#ff453a", marginTop: 4, fontWeight: 600 }}>
+                            Flight not authorized in this grid cell
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1628,7 +1735,7 @@ export default function App() {
               </div>
             )}
 
-            {panelTab === "flights" && (
+            {panelTab === "adsb" && (
               <div className="panelSection">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div className="sectionTitle">Live Flights</div>
@@ -1938,7 +2045,7 @@ export default function App() {
         {adsb.status !== "disconnected" && (
           <div
             className="pill"
-            onClick={() => { setPanelTab("flights"); setPanelOpen(true); }}
+            onClick={() => { setPanelTab("adsb"); setPanelOpen(true); }}
             style={{ whiteSpace: "nowrap" }}
           >
             <span style={{

@@ -2,8 +2,8 @@
 // React hook for fetching and managing FAA airspace layers from ArcGIS
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { AirspaceZone, AirspaceBbox, FaaLayerId } from "./airspace";
-import { FAA_LAYERS, fetchAirspace } from "./airspace";
+import type { AirspaceZone, AirspaceBbox, FaaLayerId, ObstructionPoint } from "./airspace";
+import { FAA_LAYERS, fetchAirspace, fetchObstructions } from "./airspace";
 
 const FAA_ENABLED_KEY = "dronedaa.faaLayers";
 const DEBOUNCE_MS = 500;
@@ -18,6 +18,7 @@ function loadEnabledLayers(): Set<FaaLayerId> {
 
 export type FaaLayersState = {
   zones: AirspaceZone[];
+  obstructions: ObstructionPoint[];
   enabledLayers: Set<FaaLayerId>;
   loading: boolean;
   error: string | null;
@@ -27,6 +28,7 @@ export type FaaLayersState = {
 export function useFaaLayers(bbox: AirspaceBbox | null): FaaLayersState {
   const [enabledLayers, setEnabledLayers] = useState<Set<FaaLayerId>>(loadEnabledLayers);
   const [zones, setZones] = useState<AirspaceZone[]>([]);
+  const [obstructions, setObstructions] = useState<ObstructionPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,6 +51,7 @@ export function useFaaLayers(bbox: AirspaceBbox | null): FaaLayersState {
   useEffect(() => {
     if (!bbox || enabledLayers.size === 0) {
       setZones([]);
+      setObstructions([]);
       setLoading(false);
       return;
     }
@@ -62,16 +65,27 @@ export function useFaaLayers(bbox: AirspaceBbox | null): FaaLayersState {
       setLoading(true);
       setError(null);
 
-      const activeLayers = FAA_LAYERS.filter((l) => enabledLayers.has(l.id));
+      // Separate polygon layers from point layers (obstructions)
+      const polygonLayers = FAA_LAYERS.filter((l) => enabledLayers.has(l.id) && l.id !== "obstructions");
+      const obstructionsEnabled = enabledLayers.has("obstructions");
 
-      Promise.all(
-        activeLayers.map((layer) =>
-          fetchAirspace(bbox, layer, abort.signal).catch(() => [] as AirspaceZone[]),
-        ),
-      )
-        .then((results) => {
+      const polygonPromise = polygonLayers.length > 0
+        ? Promise.all(
+            polygonLayers.map((layer) =>
+              fetchAirspace(bbox, layer, abort.signal).catch(() => [] as AirspaceZone[]),
+            ),
+          ).then((results) => results.flat())
+        : Promise.resolve([] as AirspaceZone[]);
+
+      const obsPromise = obstructionsEnabled
+        ? fetchObstructions(bbox, abort.signal).catch(() => [] as ObstructionPoint[])
+        : Promise.resolve([] as ObstructionPoint[]);
+
+      Promise.all([polygonPromise, obsPromise])
+        .then(([zoneResults, obsResults]) => {
           if (cancelled) return;
-          setZones(results.flat());
+          setZones(zoneResults);
+          setObstructions(obsResults);
           setLoading(false);
         })
         .catch((err) => {
@@ -88,5 +102,5 @@ export function useFaaLayers(bbox: AirspaceBbox | null): FaaLayersState {
     };
   }, [bbox?.south, bbox?.west, bbox?.north, bbox?.east, enabledLayers]);
 
-  return { zones, enabledLayers, toggleLayer, loading, error };
+  return { zones, obstructions, enabledLayers, toggleLayer, loading, error };
 }

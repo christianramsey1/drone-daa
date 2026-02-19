@@ -10,7 +10,13 @@ export type AirspaceType =
   | "prohibited"
   | "tfr"
   | "sua" // Special Use Airspace
-  | "laanc"; // LAANC UAS Facility Map
+  | "laanc" // LAANC UAS Facility Map
+  | "nsrPermanent" // National Security UAS Flight Restrictions (permanent)
+  | "nsrPending" // Pending National Security Flight Restrictions
+  | "sata" // Supplemental Air Traffic Areas (SFRA, special rules)
+  | "recFlyer" // Recreational Flyer Fixed Sites (FRIA)
+  | "fria" // FAA-Recognized Identification Areas
+  | "obstruction"; // Digital Obstacle File (towers, antennas, etc.)
 
 export type AirspaceZone = {
   id: string;
@@ -31,15 +37,33 @@ export type AirspaceBbox = {
 
 // ── FAA ArcGIS Layer Configuration ──────────────────────────────────────
 
+export type ObstructionPoint = {
+  id: string;
+  lat: number;
+  lon: number;
+  aglFt: number;
+  amslFt: number;
+  typeCode: string;
+  lighting: string;
+  city?: string;
+  state?: string;
+};
+
 export type FaaLayerId =
   | "classB"
   | "classC"
   | "classD"
-  | "classE"
+  | "classE5"
   | "tfrAreas"
   | "specialUse"
   | "prohibited"
-  | "securityZones"
+  | "nsrPartTime"
+  | "nsrPermanent"
+  | "nsrPending"
+  | "sata"
+  | "recFlyer"
+  | "fria"
+  | "obstructions"
   | "uasFacilityMap";
 
 export type FaaLayerConfig = {
@@ -55,6 +79,7 @@ export type FaaLayerConfig = {
 const ARCGIS_BASE = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services";
 
 export const FAA_LAYERS: FaaLayerConfig[] = [
+  // ── Airspace classes ───────────────────────────────────────────
   {
     id: "classB",
     label: "Class B",
@@ -83,14 +108,15 @@ export const FAA_LAYERS: FaaLayerConfig[] = [
     where: "CLASS='D'",
   },
   {
-    id: "classE",
-    label: "Class E",
+    id: "classE5",
+    label: "Class E5 (700' AGL)",
     serviceUrl: `${ARCGIS_BASE}/Class_Airspace/FeatureServer`,
     layerIndex: 0,
     defaultType: "classE",
     defaultEnabled: false,
-    where: "CLASS='E'",
+    where: "LOCAL_TYPE='CLASS_E5'",
   },
+  // ── Restrictions ───────────────────────────────────────────────
   {
     id: "tfrAreas",
     label: "TFR Areas",
@@ -115,14 +141,66 @@ export const FAA_LAYERS: FaaLayerConfig[] = [
     defaultType: "prohibited",
     defaultEnabled: true,
   },
+  // ── National Security ──────────────────────────────────────────
   {
-    id: "securityZones",
-    label: "UAS Security Zones",
+    id: "nsrPartTime",
+    label: "NSR Part-Time",
     serviceUrl: `${ARCGIS_BASE}/Part_Time_National_Security_UAS_Flight_Restrictions_Primary/FeatureServer`,
     layerIndex: 0,
     defaultType: "restricted",
     defaultEnabled: false,
   },
+  {
+    id: "nsrPermanent",
+    label: "NSR Permanent (DoD)",
+    serviceUrl: `${ARCGIS_BASE}/DoD_Mar_13/FeatureServer`,
+    layerIndex: 0,
+    defaultType: "nsrPermanent",
+    defaultEnabled: true,
+  },
+  {
+    id: "nsrPending",
+    label: "NSR Pending",
+    serviceUrl: `${ARCGIS_BASE}/Pending_Part_Time_National_Security_UAS_Flight_Restrictions/FeatureServer`,
+    layerIndex: 0,
+    defaultType: "nsrPending",
+    defaultEnabled: false,
+  },
+  // ── Special areas ──────────────────────────────────────────────
+  {
+    id: "sata",
+    label: "SATA (SFRA / Special Rules)",
+    serviceUrl: `${ARCGIS_BASE}/Boundary_Airspace/FeatureServer`,
+    layerIndex: 0,
+    defaultType: "sata",
+    defaultEnabled: false,
+  },
+  {
+    id: "recFlyer",
+    label: "Recreational Flyer Fixed Sites",
+    serviceUrl: `${ARCGIS_BASE}/Recreational_Flyer_Fixed_Sites/FeatureServer`,
+    layerIndex: 0,
+    defaultType: "recFlyer",
+    defaultEnabled: false,
+  },
+  {
+    id: "fria",
+    label: "FRIA (Recognized ID Areas)",
+    serviceUrl: `${ARCGIS_BASE}/FAA_Recognized_Identification_Areas/FeatureServer`,
+    layerIndex: 0,
+    defaultType: "fria",
+    defaultEnabled: false,
+  },
+  // ── Obstructions ────────────────────────────────────────────────
+  {
+    id: "obstructions",
+    label: "Obstructions (DOF)",
+    serviceUrl: `${ARCGIS_BASE}/Digital_Obstacle_File/FeatureServer`,
+    layerIndex: 0,
+    defaultType: "obstruction",
+    defaultEnabled: false,
+  },
+  // ── UAS Facility Map ───────────────────────────────────────────
   {
     id: "uasFacilityMap",
     label: "LAANC Grid",
@@ -174,11 +252,18 @@ export async function fetchAirspace(
     // Determine airspace type from CLASS field if available
     const type = attrs.CLASS ? (CLASS_TO_TYPE[attrs.CLASS] ?? layer.defaultType) : layer.defaultType;
 
-    // Build name — include LAANC ceiling altitude when available
-    let name = attrs.NAME ?? attrs.IDENT ?? layer.label;
+    // Build name from type-appropriate attributes
+    let name = attrs.NAME ?? attrs.SITE_NAME ?? attrs.title ?? attrs.Facility
+      ?? attrs.Base ?? attrs.IDENT ?? layer.label;
     const ceilingFt = attrs.CEILING ?? attrs.UPPER_VAL ?? attrs.CEILING_ALT ?? null;
     if (layer.defaultType === "laanc" && ceilingFt != null) {
       name = `LAANC ${ceilingFt} ft AGL`;
+    }
+    if (layer.defaultType === "recFlyer" && attrs.SITE_NAME) {
+      name = attrs.SITE_NAME;
+    }
+    if (layer.defaultType === "fria" && attrs.title) {
+      name = attrs.title;
     }
 
     return {
@@ -206,6 +291,53 @@ export function airspaceColor(type: AirspaceType): string {
     case "tfr": return "#f97316"; // orange
     case "sua": return "#eab308"; // yellow
     case "laanc": return "#22d3ee"; // bright cyan for LAANC
+    case "nsrPermanent": return "#b91c1c"; // deep red
+    case "nsrPending": return "#f59e0b"; // amber
+    case "sata": return "#10b981"; // emerald green
+    case "recFlyer": return "#34d399"; // light green
+    case "fria": return "#a3e635"; // lime
+    case "obstruction": return "#fb923c"; // orange-300
     default: return "#9ca3af";
   }
+}
+
+// ── Obstruction points (Digital Obstacle File) ───────────────────────
+
+export async function fetchObstructions(
+  bbox: AirspaceBbox,
+  signal?: AbortSignal,
+): Promise<ObstructionPoint[]> {
+  const geometry = `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`;
+  const params = new URLSearchParams({
+    where: "1=1",
+    outFields: "OBJECTID,Type_Code,AGL,AMSL,Lighting,City,State",
+    geometry,
+    geometryType: "esriGeometryEnvelope",
+    inSR: "4326",
+    spatialRel: "esriSpatialRelIntersects",
+    outSR: "4326",
+    resultRecordCount: "500",
+    f: "pjson",
+  });
+
+  const url = `${ARCGIS_BASE}/Digital_Obstacle_File/FeatureServer/0/query?${params}`;
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`Obstruction query failed: ${res.status}`);
+  const data = await res.json();
+
+  return (data.features ?? []).map((f: any) => {
+    const attrs = f.attributes ?? {};
+    const pt = f.geometry ?? {};
+    return {
+      id: `obs-${attrs.OBJECTID ?? Math.random().toString(36).slice(2)}`,
+      lat: pt.y ?? 0,
+      lon: pt.x ?? 0,
+      aglFt: attrs.AGL ?? 0,
+      amslFt: attrs.AMSL ?? 0,
+      typeCode: attrs.Type_Code ?? "UNKNOWN",
+      lighting: attrs.Lighting ?? "",
+      city: attrs.City,
+      state: attrs.State,
+    };
+  });
 }

@@ -2,7 +2,7 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Annotation, Polyline } from "./MapKitMap";
+import type { Annotation, Polyline, TileOverlayConfig } from "./MapKitMap";
 import {
   createSeamarkIcon,
   createStartWaypointIcon,
@@ -21,9 +21,11 @@ type Props = {
   className?: string;
   annotations?: Annotation[];
   polylines?: Polyline[];
+  tileOverlays?: TileOverlayConfig[];
   selectedId?: string | null;
   onSelect?: (id: string) => void;
   onMapClick?: (lat: number, lon: number) => void;
+  onOverlaySelect?: (id: string) => void;
   onViewChange?: (zoom: number, bounds: { south: number; west: number; north: number; east: number }) => void;
 };
 
@@ -35,8 +37,10 @@ export default function LeafletMap({
   className,
   annotations = [],
   polylines = [],
+  tileOverlays = [],
   onSelect,
   onMapClick,
+  onOverlaySelect,
   onViewChange,
 }: Props) {
   const elRef = useRef<HTMLDivElement | null>(null);
@@ -46,6 +50,8 @@ export default function LeafletMap({
   const centeredRef = useRef(false);
   const centerRef = useRef(center);
 
+  const onOverlaySelectRef = useRef(onOverlaySelect);
+  onOverlaySelectRef.current = onOverlaySelect;
   const onViewChangeRef = useRef(onViewChange);
 
   // Keep refs current
@@ -271,6 +277,14 @@ export default function LeafletMap({
             iconAnchor: [8, 8],
           });
           marker = L.marker([a.lat, a.lon], { icon, interactive: false }).addTo(map);
+        } else if (a.style === "obstruction") {
+          icon = L.divIcon({
+            html: `<div style="width:10px;height:10px;color:${a.color ?? "#fb923c"};font-size:10px;line-height:10px;text-align:center;">\u25B2</div>`,
+            className: "",
+            iconSize: [10, 10],
+            iconAnchor: [5, 5],
+          });
+          marker = L.marker([a.lat, a.lon], { icon, interactive: false }).addTo(map);
         } else if (a.style === "seamark") {
           const canvas = createSeamarkIcon(a.color ?? "#ff3b30");
           const url = canvas.toDataURL();
@@ -367,6 +381,7 @@ export default function LeafletMap({
             dashArray: p.dashed ? "8 4" : undefined,
           }).addTo(map);
         }
+        line.on("click", () => onOverlaySelectRef.current?.(p.id));
         polylinesRef.current.set(p.id, line);
       } else {
         line.setLatLngs(latlngs);
@@ -380,6 +395,34 @@ export default function LeafletMap({
       }
     });
   }, [polylines]);
+
+  // Update tile overlays
+  const tileOverlayMapRef = useRef<Map<string, L.TileLayer>>(new Map());
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const currentIds = new Set(tileOverlays.map((t) => t.id));
+
+    // Remove stale
+    tileOverlayMapRef.current.forEach((layer, id) => {
+      if (!currentIds.has(id)) {
+        map.removeLayer(layer);
+        tileOverlayMapRef.current.delete(id);
+      }
+    });
+
+    // Add new
+    tileOverlays.forEach((t) => {
+      if (tileOverlayMapRef.current.has(t.id)) return;
+      const layer = L.tileLayer(t.urlTemplate, {
+        opacity: t.opacity ?? 0.7,
+        minZoom: 5,
+        maxZoom: 12,
+      }).addTo(map);
+      tileOverlayMapRef.current.set(t.id, layer);
+    });
+  }, [tileOverlays]);
 
   return (
     <div

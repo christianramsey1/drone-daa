@@ -63,6 +63,7 @@ type Props = {
   selectedId?: string | null;
   onSelect?: (id: string) => void;
   onMapClick?: (lat: number, lon: number) => void;
+  onOverlaySelect?: (id: string) => void;
   onViewChange?: (zoom: number, bounds: { south: number; west: number; north: number; east: number }) => void;
 };
 
@@ -137,6 +138,7 @@ export default function MapKitMap({
   selectedId,
   onSelect,
   onMapClick,
+  onOverlaySelect,
   onViewChange,
 }: Props) {
   const elRef = useRef<HTMLDivElement | null>(null);
@@ -148,6 +150,8 @@ export default function MapKitMap({
   const annotationsMapRef = useRef<Map<string, any>>(new Map());
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const polylinesMapRef = useRef<Map<string, any>>(new Map());
+  const onOverlaySelectRef = useRef(onOverlaySelect);
+  onOverlaySelectRef.current = onOverlaySelect;
 
   // Initialize MapKit
   useEffect(() => {
@@ -458,6 +462,16 @@ export default function MapKitMap({
             anchorOffset: new DOMPoint(0, 0),
             calloutEnabled: false,
           });
+        } else if (a.style === "obstruction") {
+          // Small orange triangle for obstructions (towers, antennas)
+          annotation = new mapkit.MarkerAnnotation(coord, {
+            title: a.title,
+            subtitle: a.subtitle,
+            data: { id: a.id, style: a.style },
+            glyphText: "\u25B2",
+            color: a.color ?? "#fb923c",
+            calloutEnabled: false,
+          });
         } else {
           // Regular marker annotation for POIs
           annotation = new mapkit.MarkerAnnotation(coord, {
@@ -549,6 +563,10 @@ export default function MapKitMap({
           overlay = new mapkit.PolylineOverlay(coordinates, { style });
         }
 
+        (overlay as any)._daaId = p.id;
+        overlay.addEventListener("select", () => {
+          onOverlaySelectRef.current?.(p.id);
+        });
         map.addOverlay(overlay);
         polylinesMapRef.current.set(p.id, overlay);
       } else {
@@ -564,9 +582,39 @@ export default function MapKitMap({
     });
   }, [polylines, status]);
 
-  // Note: MapKit JS doesn't have built-in TileOverlay support like native MapKit
-  // The tileOverlays prop is accepted but ignored - would need custom canvas implementation
-  void tileOverlays; // Acknowledged but not implemented
+  // Update tile overlays
+  const tileOverlayMapRef = useRef<Map<string, any>>(new Map());
+  useEffect(() => {
+    if (!mapRef.current || !window.mapkit || status !== "ready") return;
+    const map = mapRef.current;
+    const mk = window.mapkit;
+
+    const currentIds = new Set(tileOverlays.map((t) => t.id));
+
+    // Remove stale
+    const toRemove: string[] = [];
+    tileOverlayMapRef.current.forEach((_, id) => {
+      if (!currentIds.has(id)) toRemove.push(id);
+    });
+    toRemove.forEach((id) => {
+      map.removeOverlay(tileOverlayMapRef.current.get(id));
+      tileOverlayMapRef.current.delete(id);
+    });
+
+    // Add new
+    tileOverlays.forEach((t) => {
+      if (tileOverlayMapRef.current.has(t.id)) return;
+      const overlay = new mk.TileOverlay(
+        (x: number, y: number, z: number, _scale: number, _data: any) =>
+          t.urlTemplate.replace("{x}", String(x)).replace("{y}", String(y)).replace("{z}", String(z)),
+      );
+      overlay.opacity = t.opacity ?? 0.7;
+      overlay.minimumZ = 5;
+      overlay.maximumZ = 12;
+      map.addOverlay(overlay);
+      tileOverlayMapRef.current.set(t.id, overlay);
+    });
+  }, [tileOverlays, status]);
 
   return (
     <div
