@@ -4,9 +4,10 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "dev": "concurrently -k -n API,WEB \"node api-local.js\" \"npm --prefix web run dev\"",
+    "dev": "concurrently -k -n API,WEB,RELAY \"node api-local.js\" \"npm --prefix web run dev\" \"node relay/index.js\"",
     "dev:api": "node api-local.js",
     "dev:web": "npm --prefix web run dev",
+    "dev:relay": "node relay/index.js",
     "build": "npm --prefix web run build",
     "preview": "npm --prefix web run preview"
   },
@@ -14,7 +15,8 @@
     "@vercel/postgres": "^0.10.0",
     "cheerio": "^1.2.0",
     "express": "^5.2.1",
-    "jose": "^4.15.9"
+    "jose": "^4.15.9",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@vercel/node": "^5.5.28",

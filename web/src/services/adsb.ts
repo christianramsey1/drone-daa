@@ -11,9 +11,20 @@ export type AircraftTrack = {
   speedKts: number;
   vertRateFpm?: number; // vertical rate (feet per minute)
   squawk?: string;
-  category: string;  // A1-A7, B1-B7 per DO-260B
+  category: string;  // emitter category label (Light, Large, Heavy, etc.)
   onGround: boolean;
   timestamp: number;
+};
+
+/** WebSocket snapshot from the GDL90 relay */
+export type AdsbSnapshot = {
+  type: "snapshot";
+  timestamp: number;
+  receiverConnected: boolean;
+  gpsValid: boolean;
+  ownship: AircraftTrack | null;
+  aircraft: AircraftTrack[];
+  count: number;
 };
 
 export type TrackBbox = {
@@ -23,7 +34,7 @@ export type TrackBbox = {
   east: number;
 };
 
-/** Fetch live manned aircraft positions from ADS-B */
+/** Fetch live manned aircraft from online ADS-B API (future) */
 export async function fetchAircraft(
   _bbox: TrackBbox
 ): Promise<AircraftTrack[]> {

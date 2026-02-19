@@ -70,3 +70,32 @@ export function etaMinutes(distanceNmVal: number, speedKts: number | null | unde
   if (!speedKts || !Number.isFinite(speedKts) || speedKts <= 0) return null;
   return distanceNmVal / knotsToNmPerMin(speedKts);
 }
+
+// --- Projection helpers -------------------------------------------------------
+
+// Great-circle destination point from origin, bearing, speed, and time.
+export function destinationPoint(
+  from: LatLon,
+  bearingDeg: number,
+  speedKts: number,
+  seconds: number,
+): LatLon {
+  const distNm = (speedKts / 3600) * seconds;
+  const distRad = (distNm * 1852) / 6371000;
+  const brng = toRad(bearingDeg);
+  const lat1 = toRad(from.lat);
+  const lon1 = toRad(from.lon);
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(distRad) +
+    Math.cos(lat1) * Math.sin(distRad) * Math.cos(brng),
+  );
+  const lon2 =
+    lon1 +
+    Math.atan2(
+      Math.sin(brng) * Math.sin(distRad) * Math.cos(lat1),
+      Math.cos(distRad) - Math.sin(lat1) * Math.sin(lat2),
+    );
+
+  return { lat: toDeg(lat2), lon: toDeg(lon2) };
+}

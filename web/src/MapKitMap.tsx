@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { getApiBaseUrl } from "./platform";
+import {
+  createSeamarkIcon,
+  createStartWaypointIcon,
+  createEndWaypointIcon,
+  createGpsPositionIcon,
+  createAircraftElement,
+  createDroneIcon,
+  createOperatorIcon,
+  getBreadcrumbDotUrl,
+} from "./mapIcons";
 
 declare global {
   interface Window {
@@ -19,6 +29,11 @@ export type Annotation = {
   kind?: string;
   emoji?: string;
   color?: string; // For seamark circle colors (red/green)
+  // Aircraft-specific fields
+  heading?: number;
+  iconSize?: number;
+  dataTagLines?: string[];
+  alertLevel?: "normal" | "caution" | "warning";
 };
 
 export type Polyline = {
@@ -28,6 +43,8 @@ export type Polyline = {
   opacity?: number;
   color?: string;
   dashed?: boolean;
+  fillColor?: string;
+  fillOpacity?: number;
 };
 
 export type TileOverlayConfig = {
@@ -46,171 +63,10 @@ type Props = {
   selectedId?: string | null;
   onSelect?: (id: string) => void;
   onMapClick?: (lat: number, lon: number) => void;
+  onViewChange?: (zoom: number, bounds: { south: number; west: number; north: number; east: number }) => void;
 };
 
 const DEFAULT_CENTER = { lat: 37.093, lon: -79.671 };
-
-/**
- * Creates a small circle marker with white halo for channel markers
- */
-function createSeamarkIcon(color: string): HTMLCanvasElement {
-  const size = 12;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return canvas;
-
-  const center = size / 2;
-  const radius = 4;
-
-  // Check if it's a light color that needs a dark border
-  const colorLower = color.toLowerCase();
-  const isLightColor = colorLower.includes("#e0e0e0") ||
-                       colorLower.includes("#ffd60a") ||
-                       colorLower.includes("white") ||
-                       colorLower.includes("yellow");
-
-  // White halo (outer circle)
-  ctx.beginPath();
-  ctx.arc(center, center, radius + 1.5, 0, 2 * Math.PI);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-  ctx.fill();
-
-  // Colored inner circle
-  ctx.beginPath();
-  ctx.arc(center, center, radius, 0, 2 * Math.PI);
-  ctx.fillStyle = color;
-  ctx.fill();
-
-  // Add dark border for light-colored markers so they're visible
-  if (isLightColor) {
-    ctx.beginPath();
-    ctx.arc(center, center, radius, 0, 2 * Math.PI);
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.6)";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  }
-
-  return canvas;
-}
-
-/**
- * Creates a start waypoint marker (upward triangle with black border)
- */
-function createStartWaypointIcon(color: string): HTMLCanvasElement {
-  const size = 24;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return canvas;
-
-  const centerX = size / 2;
-  const centerY = size / 2;
-  const triangleSize = 9;
-
-  // Black border triangle
-  ctx.beginPath();
-  ctx.moveTo(centerX, centerY - triangleSize - 2.5);
-  ctx.lineTo(centerX - triangleSize - 2, centerY + triangleSize + 2);
-  ctx.lineTo(centerX + triangleSize + 2, centerY + triangleSize + 2);
-  ctx.closePath();
-  ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-  ctx.fill();
-
-  // Colored triangle
-  ctx.beginPath();
-  ctx.moveTo(centerX, centerY - triangleSize);
-  ctx.lineTo(centerX - triangleSize, centerY + triangleSize);
-  ctx.lineTo(centerX + triangleSize, centerY + triangleSize);
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
-
-  return canvas;
-}
-
-/**
- * Creates an end waypoint marker (octagon/stop sign with black border)
- */
-function createEndWaypointIcon(color: string): HTMLCanvasElement {
-  const size = 24;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return canvas;
-
-  const centerX = size / 2;
-  const centerY = size / 2;
-  const radius = 9;
-  const angle = Math.PI / 8; // 22.5 degrees
-
-  // Helper function to draw octagon
-  function drawOctagon(cx: number, cy: number, r: number) {
-    if (!ctx) return;
-    ctx.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const theta = angle + (i * Math.PI / 4);
-      const x = cx + r * Math.cos(theta);
-      const y = cy + r * Math.sin(theta);
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.closePath();
-  }
-
-  // Black border octagon
-  drawOctagon(centerX, centerY, radius + 2.5);
-  ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-  ctx.fill();
-
-  // Colored octagon
-  drawOctagon(centerX, centerY, radius);
-  ctx.fillStyle = color;
-  ctx.fill();
-
-  return canvas;
-}
-
-/**
- * Creates a GPS position marker (pulsing blue dot with white border)
- */
-function createGpsPositionIcon(color: string): HTMLCanvasElement {
-  const size = 20;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return canvas;
-
-  const centerX = size / 2;
-  const centerY = size / 2;
-
-  // White border circle
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
-  ctx.fillStyle = "white";
-  ctx.fill();
-
-  // Colored inner circle
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, 6, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
-
-  // Small white center dot for depth
-  ctx.beginPath();
-  ctx.arc(centerX - 1.5, centerY - 1.5, 2, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-  ctx.fill();
-
-  return canvas;
-}
 
 function ensureMapKitCss() {
   const id = "mapkit-css";
@@ -281,6 +137,7 @@ export default function MapKitMap({
   selectedId,
   onSelect,
   onMapClick,
+  onViewChange,
 }: Props) {
   const elRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -351,6 +208,25 @@ export default function MapKitMap({
             setStatus(`map error: ${evt?.message || "unknown"}`);
           });
 
+          // Report view changes for FAA layer fetching
+          mapRef.current.addEventListener("region-change-end", () => {
+            if (onViewChange && mapRef.current) {
+              const r = mapRef.current.region;
+              const lat = r.center.latitude;
+              const lon = r.center.longitude;
+              const dLat = r.span.latitudeDelta / 2;
+              const dLon = r.span.longitudeDelta / 2;
+              // Approximate zoom from span
+              const zoom = Math.round(Math.log2(360 / r.span.longitudeDelta));
+              onViewChange(zoom, {
+                south: lat - dLat,
+                north: lat + dLat,
+                west: lon - dLon,
+                east: lon + dLon,
+              });
+            }
+          });
+
           setStatus("ready");
         } else {
           mapRef.current.region = region;
@@ -419,6 +295,20 @@ export default function MapKitMap({
     annotations.forEach((a) => {
       let annotation = annotationsMapRef.current.get(a.id);
 
+      // Aircraft/Drone: check if existing annotation needs full recreation
+      if (annotation && (a.style === "aircraft" || a.style === "drone")) {
+        const heading = a.heading ?? 0;
+        const iconSz = a.iconSize ?? 32;
+        const tagLines = a.dataTagLines ?? [];
+        const level = a.alertLevel ?? "normal";
+        const newKey = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${tagLines.join("|")}`;
+        if (annotation.data?._key !== newKey) {
+          map.removeAnnotation(annotation);
+          annotationsMapRef.current.delete(a.id);
+          annotation = undefined; // recreate immediately below
+        }
+      }
+
       if (!annotation) {
         // Create new annotation
         const coord = new mapkit.Coordinate(a.lat, a.lon);
@@ -482,6 +372,78 @@ export default function MapKitMap({
             anchorOffset: new DOMPoint(0, -12),
             calloutEnabled: false,
           });
+        } else if (a.style === "aircraft") {
+          // Aircraft: DOM-based annotation with icon + data tag
+          const heading = a.heading ?? 0;
+          const iconSz = a.iconSize ?? 32;
+          const tagLines = a.dataTagLines ?? [];
+          const level = a.alertLevel ?? "normal";
+          const _key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${tagLines.join("|")}`;
+
+          annotation = new mapkit.Annotation(coord, () => {
+            return createAircraftElement(heading, level, iconSz, tagLines);
+          }, {
+            data: { id: a.id, style: a.style, kind: a.kind, heading, _key },
+            anchorOffset: new DOMPoint(0, -iconSz / 2),
+            calloutEnabled: false,
+            animates: false,
+          });
+        } else if (a.style === "drone") {
+          // Drone: DOM-based annotation with quadcopter icon + data tag
+          const heading = a.heading ?? 0;
+          const iconSz = a.iconSize ?? 28;
+          const tagLines = a.dataTagLines ?? [];
+          const level = a.alertLevel ?? "normal";
+          const _key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${tagLines.join("|")}`;
+
+          annotation = new mapkit.Annotation(coord, () => {
+            const wrapper = document.createElement("div");
+            wrapper.style.cssText = `width:${iconSz}px;height:${iconSz}px;position:relative;overflow:visible;`;
+            const canvas = createDroneIcon(heading, level, iconSz);
+            canvas.style.cssText = `display:block;width:${iconSz}px;height:${iconSz}px;`;
+            wrapper.appendChild(canvas);
+            if (tagLines.length > 0) {
+              const tag = document.createElement("div");
+              tag.style.cssText =
+                `position:absolute;left:${iconSz + 4}px;top:0;` +
+                "font-family:system-ui,-apple-system,sans-serif;font-size:10px;line-height:1.3;" +
+                "color:rgba(255,255,255,0.95);text-shadow:0 1px 2px rgba(0,0,0,0.9);" +
+                "white-space:nowrap;pointer-events:none;" +
+                "background:rgba(0,0,0,0.55);padding:1px 4px;border-radius:3px;";
+              for (const line of tagLines) {
+                const div = document.createElement("div");
+                div.textContent = line;
+                tag.appendChild(div);
+              }
+              wrapper.appendChild(tag);
+            }
+            return wrapper;
+          }, {
+            data: { id: a.id, style: a.style, kind: a.kind, heading, _key },
+            anchorOffset: new DOMPoint(0, -iconSz / 2),
+            calloutEnabled: false,
+            animates: false,
+          });
+        } else if (a.style === "rid-operator") {
+          // Operator/takeoff location marker
+          const canvas = createOperatorIcon(16);
+          const url = canvas.toDataURL();
+          annotation = new mapkit.ImageAnnotation(coord, {
+            data: { id: a.id, style: a.style },
+            url: { 1: url },
+            size: { width: 16, height: 16 },
+            anchorOffset: new DOMPoint(0, 0),
+            calloutEnabled: false,
+          });
+        } else if (a.style === "breadcrumb-dot") {
+          // Small amber dot for breadcrumb trail
+          annotation = new mapkit.ImageAnnotation(coord, {
+            data: { id: a.id, style: a.style },
+            url: { 1: getBreadcrumbDotUrl() },
+            size: { width: 6, height: 6 },
+            anchorOffset: new DOMPoint(0, -3),
+            calloutEnabled: false,
+          });
         } else if (a.style === "gps-position") {
           // GPS position marker (blue dot)
           const canvas = createGpsPositionIcon(a.color ?? "#007aff");
@@ -520,7 +482,7 @@ export default function MapKitMap({
         map.addAnnotation(annotation);
         annotationsMapRef.current.set(a.id, annotation);
       } else {
-        // Update existing annotation
+        // Update existing annotation position
         annotation.coordinate = new mapkit.Coordinate(a.lat, a.lon);
         annotation.title = a.title;
         annotation.subtitle = a.subtitle;
@@ -555,20 +517,37 @@ export default function MapKitMap({
     });
     toRemove.forEach((id) => polylinesMapRef.current.delete(id));
 
-    // Add or update polylines
+    // Add or update polylines (use PolygonOverlay when fill is needed)
     polylines.forEach((p) => {
       let overlay = polylinesMapRef.current.get(p.id);
       const coordinates = p.points.map((pt) => new mapkit.Coordinate(pt.lat, pt.lon));
 
+      // Recreate if fill state changed (polyline ↔ polygon)
+      if (overlay) {
+        const needsFill = !!p.fillColor;
+        const hadFill = !!(overlay as any)._daaFilled;
+        if (needsFill !== hadFill) {
+          map.removeOverlay(overlay);
+          polylinesMapRef.current.delete(p.id);
+          overlay = undefined;
+        }
+      }
+
       if (!overlay) {
-        overlay = new mapkit.PolylineOverlay(coordinates, {
-          style: new mapkit.Style({
-            lineWidth: p.width ?? 3,
-            strokeOpacity: p.opacity ?? 0.8,
-            strokeColor: p.color ?? "#007aff",
-            lineDash: p.dashed ? [8, 4] : undefined,
-          }),
+        const style = new mapkit.Style({
+          lineWidth: p.width ?? 3,
+          strokeOpacity: p.opacity ?? 0.8,
+          strokeColor: p.color ?? "#007aff",
+          lineDash: p.dashed ? [8, 4] : undefined,
+          ...(p.fillColor ? { fillColor: p.fillColor, fillOpacity: p.fillOpacity ?? 0.15 } : {}),
         });
+
+        if (p.fillColor) {
+          overlay = new mapkit.PolygonOverlay(coordinates, { style });
+          (overlay as any)._daaFilled = true;
+        } else {
+          overlay = new mapkit.PolylineOverlay(coordinates, { style });
+        }
 
         map.addOverlay(overlay);
         polylinesMapRef.current.set(p.id, overlay);
@@ -579,6 +558,7 @@ export default function MapKitMap({
           strokeOpacity: p.opacity ?? 0.8,
           strokeColor: p.color ?? "#007aff",
           lineDash: p.dashed ? [8, 4] : undefined,
+          ...(p.fillColor ? { fillColor: p.fillColor, fillOpacity: p.fillOpacity ?? 0.15 } : {}),
         });
       }
     });

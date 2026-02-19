@@ -26,6 +26,10 @@ export default defineConfig(() => {
           changeOrigin: true,
           secure: false,
         },
+        "/ws/adsb": {
+          target: "ws://localhost:4001",
+          ws: true,
+        },
       },
     },
   };
