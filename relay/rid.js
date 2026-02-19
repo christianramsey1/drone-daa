@@ -286,6 +286,10 @@ const httpServer = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ port: WS_PORT });
 
+wss.on("error", (err) => {
+  console.error(`[rid] WebSocket server error: ${err.message}`);
+});
+
 wss.on("listening", () => {
   console.log(`[rid] WebSocket server on ws://localhost:${WS_PORT}`);
 });
@@ -364,6 +368,10 @@ function start() {
     // Otherwise noble stateChange handler will start when ready
   }
 
+  httpServer.on("error", (err) => {
+    console.error(`[rid] HTTP server error: ${err.message}`);
+  });
+
   httpServer.listen(HTTP_PORT, () => {
     console.log(`[rid] HTTP ingest server on http://localhost:${HTTP_PORT}`);
     console.log(`[rid]   POST /api/rid — submit raw ODID or pre-parsed drone data`);
@@ -372,3 +380,15 @@ function start() {
 }
 
 start();
+
+// ── Export status for Electron tray integration ─────────────────────
+
+module.exports = {
+  getStatus: () => ({
+    scanning,
+    bleAvailable,
+    wifiAvailable,
+    droneCount: drones.size,
+    clientCount: wss.clients.size,
+  }),
+};

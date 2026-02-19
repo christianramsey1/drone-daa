@@ -2,9 +2,9 @@
 
 ## What This Is
 
-**DroneDAA** (dronedaa.com) is a React web app with iOS native wrapper for live drone flight tracking with Detect-and-Avoid (DAA) alerts. It shows FAA airspace polygons, live drone positions (via Remote ID), manned aircraft (via ADS-B), and weather — all on a MapKit JS map with a dark-themed side panel.
+**DroneDAA** (detectandavoid.com) is a React web app with iOS native wrapper for live drone flight tracking with Detect-and-Avoid (DAA) alerts. It shows FAA airspace polygons, live drone positions (via Remote ID), manned aircraft (via ADS-B), and weather — all on a MapKit JS map with a dark-themed side panel.
 
-Forked from the Lake360 architecture (MapKit, Capacitor iOS, WeatherKit, auth, payments, dark theme).
+Built on a shared architecture with MapKit, Capacitor iOS, WeatherKit, auth, payments, and dark theme.
 
 ## Tech Stack
 
@@ -112,7 +112,7 @@ npm run ios:build    # Full build + open in Xcode
 
 ## Important Notes
 
-- **Apple service IDs** (WeatherKit, MapKit) still reference the Lake360 developer account keys — update when new services are registered
+- **Apple service IDs** (WeatherKit, MapKit) are configured via env vars (`MAPKIT_MAPS_ID`, `WEATHERKIT_SERVICE_ID`, `APPLE_CLIENT_ID`) — set these in Vercel for production
 - **Mac required for iOS development**
 - **Capacitor syncs web build to iOS** — write React, not Swift
 - **Product IDs are forever** — once live, never change SKU names

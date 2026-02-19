@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Lake360</string>
+        <string>DroneDAA</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -48,9 +48,9 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Lake360 uses your location to show your position on the map and help with navigation.</string>
+	<string>DroneDAA uses your location to show your position on the map and provide proximity alerts for nearby aircraft.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Lake360 uses your location to show your position on the map and help with navigation.</string>
+	<string>DroneDAA uses your location to show your position on the map and provide proximity alerts for nearby aircraft.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

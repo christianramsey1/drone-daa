@@ -63,12 +63,12 @@ const APPLE_CLIENT_ID = import.meta.env.VITE_APPLE_CLIENT_ID || "com.dronedaa.we
 // In popup mode, Apple redirects the popup to this URL after auth, and the Apple JS SDK
 // on that page sends a postMessage back to the parent window (works cross-origin).
 // Always use the production canonical URL so localhost dev works via the popup flow.
-const PRODUCTION_ORIGIN = "https://dronedaa.com";
+const PRODUCTION_ORIGIN = "https://detectandavoid.com";
 const getRedirectUri = () => {
   if (import.meta.env.VITE_APPLE_REDIRECT_URI) {
     return import.meta.env.VITE_APPLE_REDIRECT_URI;
   }
-  if (window.location.hostname === "dronedaa.com" || window.location.hostname === "www.dronedaa.com") {
+  if (window.location.hostname === "detectandavoid.com" || window.location.hostname === "www.detectandavoid.com") {
     return PRODUCTION_ORIGIN;
   }
   // Local dev: redirect through production (popup postMessage works cross-origin)
@@ -172,7 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await SignInWithApple.authorize({
         clientId: "com.dronedaa.app",
-        redirectURI: "https://dronedaa.com",
+        redirectURI: "https://detectandavoid.com",
         scopes: "email name",
       });
 

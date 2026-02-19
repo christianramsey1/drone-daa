@@ -629,3 +629,23 @@
     font-size: 13px;
   }
 }
+
+/* ── Connection Wizard ──────────────────────────────────────────── */
+
+@keyframes wizardPulseAnim {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.wizardPulse {
+  animation: wizardPulseAnim 2s ease-in-out infinite;
+}
+
+/* Inline code styling for terminal commands */
+.panelBody code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 11px;
+}

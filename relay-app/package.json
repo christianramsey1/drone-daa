@@ -1,0 +1,25 @@
+{
+  "name": "dronedaa-relay-app",
+  "version": "1.0.0",
+  "description": "DroneDAA Relay — system tray app for ADS-B and Remote ID bridging",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "postinstall": "electron-rebuild || true"
+  },
+  "dependencies": {
+    "ws": "^8.19.0"
+  },
+  "optionalDependencies": {
+    "@abandonware/noble": "^1.9.2-24"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "@electron/rebuild": "^3.7.0"
+  }
+}

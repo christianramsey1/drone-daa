@@ -1,5 +1,5 @@
 // web/src/zones/index.ts
-// Zone configuration for DroneDAA — analogous to Lake360's lakes/index.ts
+// Zone configuration for DroneDAA
 
 export type ZoneId = string;
 

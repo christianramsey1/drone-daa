@@ -79,13 +79,21 @@ udp.on("error", (err) => {
   console.error("[relay] UDP error:", err.message);
 });
 
-udp.bind(UDP_PORT, () => {
-  console.log(`[relay] Listening for GDL90 on UDP :${UDP_PORT}`);
-});
+try {
+  udp.bind(UDP_PORT, () => {
+    console.log(`[relay] Listening for GDL90 on UDP :${UDP_PORT}`);
+  });
+} catch (err) {
+  console.error("[relay] UDP bind failed:", err.message);
+}
 
 // ── WebSocket server ──────────────────────────────────────────────────
 
 const wss = new WebSocketServer({ port: WS_PORT });
+
+wss.on("error", (err) => {
+  console.error(`[relay] WebSocket server error: ${err.message}`);
+});
 
 wss.on("listening", () => {
   console.log(`[relay] WebSocket server on ws://localhost:${WS_PORT}`);
@@ -165,3 +173,15 @@ setInterval(() => {
     `${msgCountTotal} msgs total`
   );
 }, 10000);
+
+// ── Export status for Electron tray integration ─────────────────────
+
+module.exports = {
+  getStatus: () => ({
+    receiverConnected: (Date.now() - lastUdpReceived) < 5000,
+    gpsValid: heartbeat.gpsValid,
+    trackCount: aircraft.size,
+    clientCount: wss.clients.size,
+    msgCountTotal,
+  }),
+};

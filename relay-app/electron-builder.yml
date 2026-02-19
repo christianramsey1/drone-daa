@@ -1,0 +1,56 @@
+appId: com.dronedaa.relay
+productName: DroneDAA Relay
+copyright: Copyright 2026 DroneDAA
+
+directories:
+  output: dist
+  buildResources: assets
+
+extraResources:
+  - from: "../relay"
+    to: "relay"
+    filter:
+      - "**/*.js"
+      - "package.json"
+      - "node_modules/**"
+
+files:
+  - "src/**/*"
+  - "assets/**/*"
+  - "package.json"
+  - "node_modules/**/*"
+
+npmRebuild: true
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.utilities
+  icon: assets/icons/icon.png
+  hardenedRuntime: true
+  entitlements: entitlements.mac.plist
+  entitlementsInherit: entitlements.mac.plist
+  extendInfo:
+    LSUIElement: true
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  target:
+    - nsis
+  icon: assets/icons/icon.png
+
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: false
+  runAfterFinish: true

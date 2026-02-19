@@ -1,9 +1,9 @@
 // web/src/mapIcons.ts — Shared icon factory functions for map annotations
 
 export const ALERT_COLORS: Record<string, { fill: string; border: string }> = {
-  normal:  { fill: "#00e5ff", border: "rgba(0, 0, 0, 0.9)" },
-  caution: { fill: "#ffe040", border: "rgba(0, 0, 0, 0.9)" },
-  warning: { fill: "#ff5252", border: "rgba(0, 0, 0, 0.9)" },
+  normal:  { fill: "#00ff88", border: "#ffffff" },
+  caution: { fill: "#ffee00", border: "#ffffff" },
+  warning: { fill: "#ff2200", border: "#ffffff" },
 };
 
 export function createSeamarkIcon(color: string): HTMLCanvasElement {
@@ -163,21 +163,25 @@ export function createAircraftIcon(
 
   const colors = ALERT_COLORS[alertLevel] ?? ALERT_COLORS.normal;
 
-  // Glow for visibility against map background
+  // Strong glow for visibility against any map background
   ctx.shadowColor = colors.fill;
-  ctx.shadowBlur = 6 * s;
+  ctx.shadowBlur = 12 * s;
 
+  // Outer shape (white border for maximum contrast)
   ctx.beginPath();
-  ctx.moveTo(0, -12 * s);
-  ctx.lineTo(-9 * s, 8 * s);
-  ctx.lineTo(0, 4 * s);
-  ctx.lineTo(9 * s, 8 * s);
+  ctx.moveTo(0, -13 * s);
+  ctx.lineTo(-10 * s, 9 * s);
+  ctx.lineTo(0, 5 * s);
+  ctx.lineTo(10 * s, 9 * s);
   ctx.closePath();
   ctx.fillStyle = colors.border;
   ctx.fill();
 
-  ctx.shadowBlur = 0;
+  // Second glow pass for extra pop
+  ctx.shadowColor = colors.fill;
+  ctx.shadowBlur = 8 * s;
 
+  // Inner fill
   ctx.beginPath();
   ctx.moveTo(0, -10 * s);
   ctx.lineTo(-7 * s, 7 * s);
@@ -187,15 +191,17 @@ export function createAircraftIcon(
   ctx.fillStyle = colors.fill;
   ctx.fill();
 
-  // White outline for contrast
+  ctx.shadowBlur = 0;
+
+  // Hard white outline for contrast against dark and light backgrounds
   ctx.beginPath();
-  ctx.moveTo(0, -12 * s);
-  ctx.lineTo(-9 * s, 8 * s);
-  ctx.lineTo(0, 4 * s);
-  ctx.lineTo(9 * s, 8 * s);
+  ctx.moveTo(0, -13 * s);
+  ctx.lineTo(-10 * s, 9 * s);
+  ctx.lineTo(0, 5 * s);
+  ctx.lineTo(10 * s, 9 * s);
   ctx.closePath();
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
-  ctx.lineWidth = 1 * s;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+  ctx.lineWidth = 1.5 * s;
   ctx.stroke();
 
   ctx.restore();
@@ -224,12 +230,12 @@ export function createDroneIcon(
 
   const colors = ALERT_COLORS[alertLevel] ?? ALERT_COLORS.normal;
 
-  // Glow
+  // Strong glow
   ctx.shadowColor = colors.fill;
-  ctx.shadowBlur = 5 * s;
+  ctx.shadowBlur = 10 * s;
 
-  // Body X-shape (arms)
-  ctx.lineWidth = 2.5 * s;
+  // Body X-shape (arms) — white border for contrast
+  ctx.lineWidth = 3.5 * s;
   ctx.strokeStyle = colors.border;
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -239,10 +245,9 @@ export function createDroneIcon(
   ctx.lineTo(-8 * s, 8 * s);
   ctx.stroke();
 
-  ctx.shadowBlur = 0;
-
   // Arms in fill color
-  ctx.lineWidth = 1.5 * s;
+  ctx.shadowBlur = 6 * s;
+  ctx.lineWidth = 2 * s;
   ctx.strokeStyle = colors.fill;
   ctx.beginPath();
   ctx.moveTo(-8 * s, -8 * s);
@@ -250,6 +255,8 @@ export function createDroneIcon(
   ctx.moveTo(8 * s, -8 * s);
   ctx.lineTo(-8 * s, 8 * s);
   ctx.stroke();
+
+  ctx.shadowBlur = 0;
 
   // Center body circle
   ctx.beginPath();
@@ -364,9 +371,10 @@ export function createAircraftElement(
     tag.style.cssText =
       `position:absolute;left:${iconSize + 4}px;top:0;` +
       "font-family:system-ui,-apple-system,sans-serif;font-size:10px;line-height:1.3;" +
-      "color:rgba(255,255,255,0.95);text-shadow:0 1px 2px rgba(0,0,0,0.9);" +
+      "color:#ffffff;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,1);" +
       "white-space:nowrap;pointer-events:none;" +
-      "background:rgba(0,0,0,0.55);padding:1px 4px;border-radius:3px;";
+      "background:rgba(0,0,0,0.75);padding:2px 5px;border-radius:3px;" +
+      "border:1px solid rgba(255,255,255,0.3);";
     for (const line of dataTagLines) {
       const div = document.createElement("div");
       div.textContent = line;

@@ -49,7 +49,7 @@ export function isPluginAvailable(pluginName: string): boolean {
 export function getApiBaseUrl(): string {
   if (isNative()) {
     // Native apps need absolute URL to the API
-    return "https://dronedaa.com";
+    return "https://detectandavoid.com";
   }
   // Web uses relative paths
   return "";

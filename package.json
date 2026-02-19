@@ -5,11 +5,13 @@
   "type": "commonjs",
   "scripts": {
     "dev": "concurrently -k -n API,WEB,RELAY \"node api-local.js\" \"npm --prefix web run dev\" \"node relay/start.js\"",
+    "dev:no-relay": "concurrently -k -n API,WEB \"node api-local.js\" \"npm --prefix web run dev\"",
     "dev:api": "node api-local.js",
     "dev:web": "npm --prefix web run dev",
     "dev:relay": "node relay/start.js",
     "dev:relay:adsb": "node relay/index.js",
     "dev:relay:rid": "node relay/rid.js",
+    "dev:relay-app": "concurrently -k -n API,WEB,TRAY \"node api-local.js\" \"npm --prefix web run dev\" \"npm --prefix relay-app start\"",
     "build": "npm --prefix web run build",
     "preview": "npm --prefix web run preview"
   },

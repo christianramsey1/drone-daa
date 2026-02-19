@@ -1,5 +1,5 @@
 /**
- * Shared WeatherKit utility for all lakes.
+ * Shared WeatherKit utility.
  *
  * Usage:
  *   const { fetchWeatherKit } = require("../shared/weatherkit");
@@ -9,9 +9,9 @@
 const fs = require("fs");
 const path = require("path");
 
-const TEAM_ID = "WNS326Z3DK";
-const KEY_ID = "6W7H25SW4U";
-const SERVICE_ID = "com.cramsey.lake360.web";
+const TEAM_ID = process.env.APPLE_TEAM_ID || "WNS326Z3DK";
+const KEY_ID = process.env.MAPKIT_KEY_ID || "6W7H25SW4U";
+const SERVICE_ID = process.env.WEATHERKIT_SERVICE_ID || "com.dronedaa.web";
 
 // Key path
 const P8_PATH = path.join(

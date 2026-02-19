@@ -12,6 +12,7 @@ import type { AirspaceBbox } from "./services/airspace";
 import { useRemoteId, type RidConnectionStatus } from "./services/useRemoteId";
 import type { DroneTrack } from "./services/remoteId";
 import { broadcastTypeLabel } from "./services/remoteId";
+import { ConnectionWizard } from "./ConnectionWizard";
 
 const LeafletMap = lazy(() => import("./LeafletMap"));
 
@@ -366,10 +367,10 @@ function AdsbStatusBadge({ status, gpsValid }: {
     receiving: "#30d158",
   };
   const labels: Record<AdsbConnectionStatus, string> = {
-    disconnected: "Disconnected",
+    disconnected: "Relay not running",
     connecting: "Connecting to relay...",
-    connected: "Relay connected (no receiver data)",
-    receiving: "ADS-B Receiver Connected",
+    connected: "Relay running — no ADS-B receiver",
+    receiving: "Receiving ADS-B data",
   };
 
   return (
@@ -400,12 +401,12 @@ function AircraftCard({ aircraft, distNm, alertLevel }: {
     : ""
     : "";
 
-  const alertColor = alertLevel === "warning" ? "#ff453a"
-    : alertLevel === "caution" ? "#ffd60a"
+  const alertColor = alertLevel === "warning" ? "#ff2200"
+    : alertLevel === "caution" ? "#ffee00"
     : undefined;
 
-  const alertBg = alertLevel === "warning" ? "rgba(255, 69, 58, 0.18)"
-    : alertLevel === "caution" ? "rgba(255, 214, 10, 0.14)"
+  const alertBg = alertLevel === "warning" ? "rgba(255, 34, 0, 0.2)"
+    : alertLevel === "caution" ? "rgba(255, 238, 0, 0.15)"
     : undefined;
 
   return (
@@ -519,6 +520,7 @@ export default function App() {
   // Panel state
   const [panelOpen, setPanelOpen] = useState(true);
   const [panelTab, setPanelTab] = useState<PanelTab>("maps");
+  const [wizardDismissed, setWizardDismissed] = useState(false);
 
   // Map state — starts null, set once from first GPS fix
   const [mapCenter, setMapCenter] = useState<{ lat: number; lon: number } | null>(null);
@@ -861,9 +863,9 @@ export default function App() {
             ac.speedKts,
             aircraftDisplay.velocityVector,
           );
-          const vecColor = ac._alertLevel === "warning" ? "#ff453a"
-            : ac._alertLevel === "caution" ? "#ffd60a"
-            : "#00d1ff";
+          const vecColor = ac._alertLevel === "warning" ? "#ff2200"
+            : ac._alertLevel === "caution" ? "#ffee00"
+            : "#00ff88";
           lines.push({
             id: `vector-${ac.id}`,
             points: [{ lat: ac.lat, lon: ac.lon }, end],
@@ -1640,8 +1642,8 @@ export default function App() {
                   const vertChar = ac.vertRateFpm
                     ? ac.vertRateFpm > 100 ? "\u2191" : ac.vertRateFpm < -100 ? "\u2193" : ""
                     : "";
-                  const alertColor = ac._alertLevel === "warning" ? "#ff453a"
-                    : ac._alertLevel === "caution" ? "#ffd60a" : "#00d1ff";
+                  const alertColor = ac._alertLevel === "warning" ? "#ff2200"
+                    : ac._alertLevel === "caution" ? "#ffee00" : "#00ff88";
                   return (
                     <div className="kv" style={{
                       padding: 8,
@@ -1955,17 +1957,63 @@ export default function App() {
                   </div>
                 )}
 
-                {adsb.status === "disconnected" && (
-                  <p className="smallMuted" style={{ marginTop: 12 }}>
-                    Connect a GDL-90 compatible ADS-B receiver to your network
-                    and start the relay to see live traffic.
-                  </p>
+                {adsb.status !== "receiving" && !wizardDismissed && (
+                  <ConnectionWizard
+                    adsbStatus={adsb.status}
+                    adsbReceiverConnected={adsb.receiverConnected}
+                    adsbCount={adsb.count}
+                    onDismiss={() => setWizardDismissed(true)}
+                    onOpenHowTo={() => setPanelTab("howto")}
+                  />
+                )}
+                {adsb.status !== "receiving" && wizardDismissed && (
+                  <div style={{ marginTop: 8 }}>
+                    <p className="smallMuted">
+                      {adsb.status === "disconnected"
+                        ? "Relay not connected."
+                        : "No ADS-B receiver detected."}
+                    </p>
+                    <button
+                      className="linkBtn"
+                      style={{ fontSize: 11, marginTop: 4 }}
+                      onClick={() => setWizardDismissed(false)}
+                    >
+                      Show setup guide
+                    </button>
+                  </div>
                 )}
               </div>
             )}
 
             {panelTab === "settings" && (
               <div className="panelSection">
+                {/* Relay Connection */}
+                <div className="sectionTitle">Relay</div>
+                <div className="row">
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                    <div style={{
+                      width: 8, height: 8, borderRadius: 4,
+                      backgroundColor: adsb.status === "receiving" ? "#30d158"
+                        : adsb.status === "connected" ? "#ffd60a"
+                        : "#ff453a",
+                      flexShrink: 0,
+                    }} />
+                    <span className="rowTitle">
+                      {adsb.status === "receiving" ? "Receiving ADS-B data"
+                        : adsb.status === "connected" ? "Relay running — no receiver"
+                        : "Relay not running"}
+                    </span>
+                  </div>
+                  <button
+                    className="chipBtn compact"
+                    onClick={() => { setWizardDismissed(false); setPanelTab("adsb"); }}
+                  >
+                    Setup
+                  </button>
+                </div>
+
+                <div className="divider" />
+
                 <div className="sectionTitle">Aircraft Display</div>
 
                 {/* Icon Size */}
@@ -2130,31 +2178,31 @@ export default function App() {
                 </div>
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>Relay Setup</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>Relay App Setup</div>
                   <p className="smallMuted">
-                    ADS-B and Remote ID data require a local relay process
-                    running on your computer or network. Start the relay with:
+                    ADS-B and Remote ID data require the DroneDAA Relay app
+                    running on your computer. Download the installer for macOS
+                    or Windows from the setup guide. The relay runs as a small
+                    icon in your menu bar (Mac) or system tray (Windows) — no
+                    configuration needed.
                   </p>
-                  <div style={{
-                    background: "rgba(255,255,255,0.06)", borderRadius: 6,
-                    padding: "6px 10px", marginTop: 4, fontSize: 12,
-                    fontFamily: "monospace", color: "rgba(255,255,255,0.8)",
-                  }}>
-                    npx dronedaa-relay
-                  </div>
-                  <p className="smallMuted" style={{ marginTop: 4 }}>
-                    Or clone the repo and run: node relay/start.js
-                  </p>
+                  <button
+                    className="chipBtn"
+                    style={{ marginTop: 8 }}
+                    onClick={() => { setWizardDismissed(false); setPanelTab("adsb"); }}
+                  >
+                    Open Setup Guide
+                  </button>
                 </div>
 
                 <div className="kv">
                   <div style={{ fontWeight: 600, fontSize: 13 }}>ADS-B Traffic (Flights Tab)</div>
                   <p className="smallMuted">
-                    Connect a GDL-90 compatible ADS-B receiver (e.g., Stratux, SkyEcho,
-                    Ping, ForeFlight Sentry) to your device's network. The relay
-                    listens on UDP port 4000 for GDL-90 data and forwards it to the
-                    web app. Aircraft are color-coded by alert level: cyan (normal),
-                    yellow (caution), red (warning).
+                    Power on your GDL-90 receiver and connect this device to the
+                    receiver's WiFi hotspot. The receiver hotspot may not provide
+                    internet access — download offline maps beforehand if needed.
+                    The relay listens on UDP port 4000 for GDL-90 data and forwards
+                    it to the web app. Aircraft are color-coded by alert level.
                   </p>
                 </div>
 

@@ -47,6 +47,10 @@ yarn-debug.log*
 yarn-error.log*
 debug.log
 
+# Relay app builds
+relay-app/dist/
+relay-app/node_modules/
+
 # Temporary files
 *.tmp
 nul

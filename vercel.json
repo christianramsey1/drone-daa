@@ -34,8 +34,8 @@
   "redirects": [
     {
       "source": "/:path(.*)",
-      "has": [{ "type": "host", "value": "www.dronedaa.com" }],
-      "destination": "https://dronedaa.com/:path",
+      "has": [{ "type": "host", "value": "www.detectandavoid.com" }],
+      "destination": "https://detectandavoid.com/:path",
       "permanent": true
     }
   ],

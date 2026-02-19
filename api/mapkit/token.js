@@ -2,11 +2,11 @@
 const fs = require("fs");
 const path = require("path");
 
-const TEAM_ID = "WNS326Z3DK";
-const KEY_ID = "6W7H25SW4U";
+const TEAM_ID = process.env.APPLE_TEAM_ID || "WNS326Z3DK";
+const KEY_ID = process.env.MAPKIT_KEY_ID || "6W7H25SW4U";
 
-// Must match the decoded JWT `sub` you showed earlier
-const MAPS_ID = "WNS326Z3DK.maps.com.cramsey.lake360.web";
+// Maps ID registered in Apple Developer → Certificates, Identifiers → Maps IDs
+const MAPS_ID = process.env.MAPKIT_MAPS_ID || `${TEAM_ID}.maps.com.dronedaa.web`;
 
 // Local dev: read from file. Production: read from env var.
 const P8_PATH = path.join(

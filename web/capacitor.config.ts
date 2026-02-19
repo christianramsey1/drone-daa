@@ -13,7 +13,7 @@ const config: CapacitorConfig = {
     // Run `npm run build` then `npx cap sync` before launching the simulator
 
     // Allow fetch requests to the production API from capacitor://localhost
-    allowNavigation: ["dronedaa.com", "*.dronedaa.com"],
+    allowNavigation: ["detectandavoid.com", "*.detectandavoid.com"],
   },
   ios: {
     // Use WKWebView (default, required for App Store)
@@ -28,7 +28,7 @@ const config: CapacitorConfig = {
   plugins: {
     CapacitorHttp: {
       // Route fetch() through native iOS networking instead of WKWebView.
-      // This bypasses CORS restrictions for API calls to lake-360.com.
+      // This bypasses CORS restrictions for API calls to detectandavoid.com.
       enabled: true,
     },
     SplashScreen: {

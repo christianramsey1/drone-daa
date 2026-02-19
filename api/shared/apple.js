@@ -34,7 +34,7 @@ async function getAppleJWKS() {
  * Verify an Apple identity token.
  *
  * @param {string} identityToken - The identity token from Apple Sign In
- * @param {string} clientId - Your Apple Services ID (e.g., "com.lake360.web")
+ * @param {string} clientId - Your Apple Services ID (e.g., "com.dronedaa.web")
  * @returns {Promise<Object>} Verified token payload
  * @throws {Error} If verification fails
  */

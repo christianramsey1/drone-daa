@@ -23,7 +23,7 @@
  * }
  *
  * Environment variables required:
- * - APPLE_CLIENT_ID: Your Apple Services ID (e.g., "com.lake360.web")
+ * - APPLE_CLIENT_ID: Your Apple Services ID (e.g., "com.dronedaa.web")
  * - JWT_SECRET: Secret for signing session tokens
  * - POSTGRES_URL: Database connection (Vercel Postgres)
  */
