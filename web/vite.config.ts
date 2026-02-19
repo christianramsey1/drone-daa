@@ -30,6 +30,10 @@ export default defineConfig(() => {
           target: "ws://localhost:4001",
           ws: true,
         },
+        "/ws/rid": {
+          target: "ws://localhost:4002",
+          ws: true,
+        },
       },
     },
   };

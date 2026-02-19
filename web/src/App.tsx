@@ -1621,13 +1621,31 @@ export default function App() {
                 </div>
 
                 <div className="kv">
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>Relay Setup</div>
+                  <p className="smallMuted">
+                    ADS-B and Remote ID data require a local relay process
+                    running on your computer or network. Start the relay with:
+                  </p>
+                  <div style={{
+                    background: "rgba(255,255,255,0.06)", borderRadius: 6,
+                    padding: "6px 10px", marginTop: 4, fontSize: 12,
+                    fontFamily: "monospace", color: "rgba(255,255,255,0.8)",
+                  }}>
+                    npx dronedaa-relay
+                  </div>
+                  <p className="smallMuted" style={{ marginTop: 4 }}>
+                    Or clone the repo and run: node relay/start.js
+                  </p>
+                </div>
+
+                <div className="kv">
                   <div style={{ fontWeight: 600, fontSize: 13 }}>ADS-B Traffic (Flights Tab)</div>
                   <p className="smallMuted">
                     Connect a GDL-90 compatible ADS-B receiver (e.g., Stratux, SkyEcho,
-                    Ping, ForeFlight Sentry) to your device's network. Start the GDL90
-                    relay process to bridge UDP traffic data to the web app. Aircraft
-                    are color-coded by alert level: cyan (normal), yellow (caution),
-                    red (warning).
+                    Ping, ForeFlight Sentry) to your device's network. The relay
+                    listens on UDP port 4000 for GDL-90 data and forwards it to the
+                    web app. Aircraft are color-coded by alert level: cyan (normal),
+                    yellow (caution), red (warning).
                   </p>
                 </div>
 
@@ -1653,10 +1671,11 @@ export default function App() {
                 <div className="kv">
                   <div style={{ fontWeight: 600, fontSize: 13 }}>Remote ID (Remote ID Tab)</div>
                   <p className="smallMuted">
-                    Scan for nearby drones broadcasting Remote ID via Bluetooth 5
-                    or WiFi Beacon per ASTM F3586-22. View each drone's position,
-                    altitude, speed, operator/takeoff location, and identification.
-                    Supports both Standard RID and Broadcast Module types.
+                    Detects nearby drones broadcasting Remote ID per ASTM F3586-22.
+                    Supports all broadcast types: Bluetooth 5 (Long Range and Legacy),
+                    WiFi Beacon, and WiFi NAN. The relay scans BLE directly when
+                    Bluetooth hardware is available, and also accepts WiFi RID data
+                    from external scanners via its HTTP ingest API.
                   </p>
                 </div>
 

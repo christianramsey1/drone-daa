@@ -100,7 +100,7 @@ export function useRemoteId(): RidState & {
     };
   }, [syncState]);
 
-  // Start scanning
+  // Start scanning — tries BLE first, then falls back to WebSocket relay
   const startScan = useCallback(async () => {
     if (scanningRef.current) return;
     scanningRef.current = true;
@@ -110,7 +110,7 @@ export function useRemoteId(): RidState & {
       setState((prev) => ({
         ...prev,
         status: "scanning",
-        error: "Native RID scanning coming soon. Use WebSocket relay.",
+        error: "Native RID scanning coming soon. Using relay.",
       }));
       connectRelay();
       return;
@@ -130,30 +130,26 @@ export function useRemoteId(): RidState & {
           "advertisementreceived",
           (event: any) => {
             if (!mountedRef.current) return;
-            // TODO: Parse Open Drone ID advertisement data from event.manufacturerData
-            // For now, create a basic track from the device info
             const deviceId = event.device?.id ?? `ble-${Date.now()}`;
             const existing = dronesRef.current.get(deviceId);
             if (existing) {
               existing.timestamp = Date.now();
               existing.rssi = event.rssi ?? existing.rssi;
             }
-            // Full parsing will use parseRidAdvertisement() from remoteId.ts
             syncState();
           },
         );
 
-        // Clean up on scan stop
         scan.addEventListener("stop", () => {
           if (scanningRef.current) {
-            // Scan stopped externally, fall back to relay
             connectRelay();
           }
         });
 
+        // Also connect relay as supplementary source (captures WiFi RID too)
+        connectRelay();
         return;
       } catch (err: any) {
-        // BLE scan failed, fall back to WebSocket relay
         setState((prev) => ({
           ...prev,
           error: `BLE: ${err.message}. Using relay.`,
@@ -161,7 +157,7 @@ export function useRemoteId(): RidState & {
       }
     }
 
-    // Fall back to WebSocket relay
+    // Fall back to WebSocket relay (handles BLE + WiFi + HTTP ingest on server side)
     setState((prev) => ({ ...prev, status: "scanning", error: null }));
     connectRelay();
   }, [connectRelay, syncState]);

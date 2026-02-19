@@ -1,0 +1,25 @@
+{
+  "name": "dronedaa-relay",
+  "version": "1.0.0",
+  "description": "DroneDAA local relay — bridges ADS-B (GDL90) and Remote ID data to the DroneDAA web app",
+  "bin": {
+    "dronedaa-relay": "./start.js"
+  },
+  "main": "start.js",
+  "scripts": {
+    "start": "node start.js",
+    "start:adsb": "node index.js",
+    "start:rid": "node rid.js"
+  },
+  "dependencies": {
+    "ws": "^8.19.0"
+  },
+  "optionalDependencies": {
+    "@abandonware/noble": "^1.9.2-24"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["drone", "adsb", "gdl90", "remote-id", "odid", "astm-f3411"],
+  "license": "MIT"
+}
