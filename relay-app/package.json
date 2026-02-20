@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "DroneDAA Relay — system tray app for ADS-B and Remote ID bridging",
   "author": "DroneDAA",
+  "repository": "github:christianramsey1/drone-daa",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",

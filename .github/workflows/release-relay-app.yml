@@ -26,9 +26,8 @@ jobs:
 
       - name: Build Mac DMG
         working-directory: relay-app
-        run: npm run dist:mac
+        run: npx electron-builder --mac --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Rename artifacts for download URL
@@ -63,9 +62,8 @@ jobs:
 
       - name: Build Windows installer
         working-directory: relay-app
-        run: npm run dist:win
+        run: npx electron-builder --win --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Rename artifacts for download URL
