@@ -67,11 +67,14 @@ function initBle() {
 function startBleScan() {
   if (!noble || !bleAvailable) return;
 
-  // Scan for Open Drone ID service UUID 0xFFFA
-  // allowDuplicates=true since RID broadcasts continuously
+  // Scan ALL BLE advertisements (no service UUID filter).
+  // ODID uses service *data* with UUID 0xFFFA, not advertised service UUIDs,
+  // so noble's scan filter won't reliably match. We filter by service data
+  // UUID in handleBleAdvertisement instead.
+  // allowDuplicates=true since RID broadcasts continuously.
   try {
-    noble.startScanning(["fffa"], true);
-    console.log("[rid] BLE scan started (ODID UUID 0xFFFA)");
+    noble.startScanning([], true);
+    console.log("[rid] BLE scan started (filtering ODID 0xFFFA in handler)");
   } catch (err) {
     console.error("[rid] BLE scan start failed:", err.message);
   }
@@ -97,11 +100,18 @@ function handleBleAdvertisement(peripheral) {
     const uuid = sd.uuid?.toLowerCase();
     if (uuid !== "fffa" && uuid !== "0000fffa-0000-1000-8000-00805f9b34fb") continue;
 
-    const data = new Uint8Array(sd.data);
+    const raw = new Uint8Array(sd.data);
+
+    // Per ASTM F3411-22a §4.3.2, BLE service data payload is:
+    //   1 byte app code (0x0D for ODID) + 1 byte message counter + ODID message(s)
+    // Strip the 2-byte header to get the actual ODID payload.
+    const hasOdidHeader = raw.length >= 27 && raw[0] === 0x0d;
+    const data = hasOdidHeader ? raw.subarray(2) : raw;
+
     if (data.length < 25) continue;
 
-    // Determine broadcast type from BLE advertisement type
-    // BT5 Long Range uses coded PHY; Legacy uses standard BLE
+    // Determine broadcast type from payload size
+    // BT5 Long Range packs multiple 25-byte messages (message pack)
     const broadcastType = data.length > 50 ? "bluetooth5LongRange" : "bluetooth5Legacy";
 
     processOdidPayload(data, broadcastType, peripheral.rssi, peripheral.id);
@@ -148,12 +158,22 @@ function processOdidPayload(data, broadcastType, rssi, peripheralId) {
 
   if (messages.length === 0) return;
 
-  // Find a Basic ID to use as key; fall back to peripheral ID
+  // For BLE Legacy (single 25-byte messages), always key by peripheralId.
+  // Each BLE ad carries only ONE message type, so Basic ID and Location
+  // arrive in separate advertisements. Keying by peripheralId ensures all
+  // message types accumulate into a single drone entry. assembleTrack()
+  // will set the display ID from the Basic ID serial number.
+  //
+  // For message packs (BLE5 LR) or HTTP ingest, a Basic ID is usually
+  // included in the pack, so we can use the serial number as the key.
   let droneId = peripheralId || `unknown-${Date.now()}`;
-  for (const msg of messages) {
-    if (msg.msgType === MSG_TYPE.BASIC_ID && msg.uaId) {
-      droneId = msg.uaId;
-      break;
+  if (messages.length > 1) {
+    // Multi-message pack — try to use serial number as key
+    for (const msg of messages) {
+      if (msg.msgType === MSG_TYPE.BASIC_ID && msg.uaId) {
+        droneId = msg.uaId;
+        break;
+      }
     }
   }
 
