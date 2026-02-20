@@ -53,9 +53,14 @@ export function useAdsb(): AdsbState {
 
     setState((prev) => ({ ...prev, status: "connecting" }));
 
-    // In dev: Vite proxies /ws/adsb → relay on 4001
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws/adsb`;
+    // In dev, Vite proxies /ws/adsb → relay on 4001.
+    // In production (detectandavoid.com), connect directly to local relay.
+    // Browsers allow ws://localhost from HTTPS pages (secure context exception).
+    const host = window.location.hostname;
+    const isDev = host === "localhost" || host === "127.0.0.1";
+    const wsUrl = isDev
+      ? `ws://${window.location.host}/ws/adsb`
+      : "ws://localhost:4001";
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
