@@ -29,14 +29,20 @@ jobs:
         run: npm run dist:mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Rename artifacts for download URL
+        run: |
+          cp relay-app/dist/*.dmg relay-app/dist/DroneDAA-Relay.dmg 2>/dev/null || true
+          cp relay-app/dist/*-mac.zip relay-app/dist/DroneDAA-Relay-mac.zip 2>/dev/null || true
 
       - name: Upload Mac artifacts
         uses: actions/upload-artifact@v4
         with:
           name: mac-build
           path: |
-            relay-app/dist/*.dmg
-            relay-app/dist/*.zip
+            relay-app/dist/DroneDAA-Relay.dmg
+            relay-app/dist/DroneDAA-Relay-mac.zip
 
   build-win:
     runs-on: windows-latest
@@ -60,12 +66,18 @@ jobs:
         run: npm run dist:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Rename artifacts for download URL
+        run: |
+          copy relay-app\dist\*.exe relay-app\dist\DroneDAA-Relay-Setup.exe 2>nul || true
+        shell: cmd
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: win-build
-          path: relay-app/dist/*.exe
+          path: relay-app/dist/DroneDAA-Relay-Setup.exe
 
   release:
     needs: [build-mac, build-win]
