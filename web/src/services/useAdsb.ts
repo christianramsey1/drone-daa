@@ -19,6 +19,10 @@ export type AdsbState = {
   gpsValid: boolean;
   count: number;
   lastUpdate: number | null;
+  /** Diagnostic: the WebSocket URL being used */
+  wsUrl: string;
+  /** Diagnostic: last error or close reason */
+  lastError: string | null;
 };
 
 const INITIAL_STATE: AdsbState = {
@@ -29,10 +33,23 @@ const INITIAL_STATE: AdsbState = {
   gpsValid: false,
   count: 0,
   lastUpdate: null,
+  wsUrl: "",
+  lastError: null,
 };
 
 const RECONNECT_BASE_MS = 3000;
 const RECONNECT_MAX_MS = 30000;
+
+function getWsUrl(): string {
+  const host = window.location.hostname;
+  const isDev = host === "localhost" || host === "127.0.0.1";
+  // In dev, Vite proxies /ws/adsb → relay on 4001.
+  // In production, connect directly to local relay.
+  // Browsers allow ws://localhost from HTTPS pages (secure context exception).
+  return isDev
+    ? `ws://${window.location.host}/ws/adsb`
+    : "ws://localhost:4001";
+}
 
 export function useAdsb(): AdsbState {
   const [state, setState] = useState<AdsbState>(INITIAL_STATE);
@@ -51,16 +68,8 @@ export function useAdsb(): AdsbState {
       wsRef.current = null;
     }
 
-    setState((prev) => ({ ...prev, status: "connecting" }));
-
-    // In dev, Vite proxies /ws/adsb → relay on 4001.
-    // In production (detectandavoid.com), connect directly to local relay.
-    // Browsers allow ws://localhost from HTTPS pages (secure context exception).
-    const host = window.location.hostname;
-    const isDev = host === "localhost" || host === "127.0.0.1";
-    const wsUrl = isDev
-      ? `ws://${window.location.host}/ws/adsb`
-      : "ws://localhost:4001";
+    const wsUrl = getWsUrl();
+    setState((prev) => ({ ...prev, status: "connecting", wsUrl, lastError: null }));
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -68,7 +77,7 @@ export function useAdsb(): AdsbState {
     ws.onopen = () => {
       if (!mountedRef.current) return;
       backoffRef.current = RECONNECT_BASE_MS; // reset on success
-      setState((prev) => ({ ...prev, status: "connected" }));
+      setState((prev) => ({ ...prev, status: "connected", lastError: null }));
     };
 
     ws.onmessage = (event) => {
@@ -76,7 +85,8 @@ export function useAdsb(): AdsbState {
       try {
         const snapshot: AdsbSnapshot = JSON.parse(event.data);
         if (snapshot.type === "snapshot") {
-          setState({
+          setState((prev) => ({
+            ...prev,
             aircraft: snapshot.aircraft,
             ownship: snapshot.ownship,
             status: snapshot.receiverConnected ? "receiving" : "connected",
@@ -84,20 +94,24 @@ export function useAdsb(): AdsbState {
             gpsValid: snapshot.gpsValid,
             count: snapshot.count,
             lastUpdate: snapshot.timestamp,
-          });
+          }));
         }
       } catch {
         // ignore malformed messages
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (!mountedRef.current) return;
       wsRef.current = null;
+      const reason = event.reason
+        ? `${event.code}: ${event.reason}`
+        : `code ${event.code}`;
       setState((prev) => ({
         ...prev,
         status: "disconnected",
         receiverConnected: false,
+        lastError: `Closed (${reason})`,
       }));
       // Auto-reconnect with exponential backoff
       reconnectRef.current = setTimeout(connect, backoffRef.current);
@@ -105,7 +119,8 @@ export function useAdsb(): AdsbState {
     };
 
     ws.onerror = () => {
-      // onclose will fire after this, triggering reconnect
+      // Record that an error occurred (onclose will fire after this)
+      setState((prev) => ({ ...prev, lastError: "Connection error" }));
       ws.close();
     };
   }, []);

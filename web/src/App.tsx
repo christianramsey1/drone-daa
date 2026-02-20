@@ -2011,6 +2011,11 @@ export default function App() {
                     Setup
                   </button>
                 </div>
+                {/* Diagnostic info */}
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 4, fontFamily: "monospace" }}>
+                  WS: {adsb.wsUrl || "n/a"} | State: {adsb.status}
+                  {adsb.lastError && <span style={{ color: "#ff453a" }}> | {adsb.lastError}</span>}
+                </div>
 
                 <div className="divider" />
 
