@@ -23,7 +23,9 @@ export function ConnectionWizard({
   const downloadUrl = useMemo(() => getRelayDownloadUrl(os), [os]);
   const osLabel = useMemo(() => getOSLabel(os), [os]);
 
-  const relayConnected = adsbStatus !== "disconnected";
+  // Only count as connected once the WebSocket is actually open.
+  // "connecting" is a transient reconnect attempt — don't flash green.
+  const relayConnected = adsbStatus === "connected" || adsbStatus === "receiving";
 
   const steps: StepDef[] = [
     {

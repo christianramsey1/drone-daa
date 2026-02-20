@@ -16,6 +16,13 @@ jobs:
         with:
           node-version: 20
 
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/relay-app-v')
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/relay-app-v}"
+          echo "Setting version to $VERSION"
+          cd relay-app && npm version "$VERSION" --no-git-tag-version
+
       - name: Install relay dependencies
         working-directory: relay
         run: npm ci
@@ -51,6 +58,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/relay-app-v')
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^relay-app-v', ''
+          Write-Host "Setting version to $version"
+          Set-Location relay-app
+          npm version $version --no-git-tag-version
+        shell: pwsh
 
       - name: Install relay dependencies
         working-directory: relay
