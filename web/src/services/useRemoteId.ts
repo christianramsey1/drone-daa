@@ -29,8 +29,8 @@ const INITIAL_STATE: RidState = {
 };
 
 const STALE_TIMEOUT_MS = 30_000; // Remove drones not seen in 30s
-const WS_RECONNECT_BASE_MS = 3_000;
-const WS_RECONNECT_MAX_MS = 30_000;
+const WS_RECONNECT_BASE_MS = 2_000;
+const WS_RECONNECT_MAX_MS = 10_000;
 
 export function useRemoteId(): RidState & {
   startScan: () => void;

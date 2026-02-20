@@ -37,8 +37,8 @@ const INITIAL_STATE: AdsbState = {
   lastError: null,
 };
 
-const RECONNECT_BASE_MS = 3000;
-const RECONNECT_MAX_MS = 30000;
+const RECONNECT_BASE_MS = 2000;
+const RECONNECT_MAX_MS = 10000;
 
 function getWsUrl(): string {
   const host = window.location.hostname;
@@ -132,12 +132,34 @@ export function useAdsb(): AdsbState {
     };
   }, []);
 
+  // Reconnect immediately when page becomes visible (user switched back to browser)
+  const reconnectNow = useCallback(() => {
+    if (!mountedRef.current) return;
+    // Only act if currently disconnected (waiting on backoff timer)
+    if (wsRef.current) return;
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current);
+      reconnectRef.current = null;
+    }
+    backoffRef.current = RECONNECT_BASE_MS;
+    connect();
+  }, [connect]);
+
   useEffect(() => {
     mountedRef.current = true;
     connect();
 
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") reconnectNow();
+    };
+    const onFocus = () => reconnectNow();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+
     return () => {
       mountedRef.current = false;
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -147,7 +169,7 @@ export function useAdsb(): AdsbState {
         reconnectRef.current = null;
       }
     };
-  }, [connect]);
+  }, [connect, reconnectNow]);
 
   return state;
 }
