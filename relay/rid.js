@@ -284,7 +284,7 @@ const httpServer = http.createServer((req, res) => {
 
 // ── WebSocket server ──────────────────────────────────────────────────
 
-const wss = new WebSocketServer({ port: WS_PORT });
+const wss = new WebSocketServer({ port: WS_PORT, host: "0.0.0.0" });
 
 wss.on("error", (err) => {
   console.error(`[rid] WebSocket server error: ${err.message}`);

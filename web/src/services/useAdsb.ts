@@ -44,11 +44,12 @@ function getWsUrl(): string {
   const host = window.location.hostname;
   const isDev = host === "localhost" || host === "127.0.0.1";
   // In dev, Vite proxies /ws/adsb → relay on 4001.
-  // In production, connect directly to local relay.
-  // Browsers allow ws://localhost from HTTPS pages (secure context exception).
+  // In production, connect directly to local relay via explicit IPv4.
+  // Using 127.0.0.1 instead of localhost because Windows often resolves
+  // localhost to ::1 (IPv6) which may not match the relay's IPv4 binding.
   return isDev
     ? `ws://${window.location.host}/ws/adsb`
-    : "ws://localhost:4001";
+    : "ws://127.0.0.1:4001";
 }
 
 export function useAdsb(): AdsbState {

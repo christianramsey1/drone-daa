@@ -80,8 +80,8 @@ udp.on("error", (err) => {
 });
 
 try {
-  udp.bind(UDP_PORT, () => {
-    console.log(`[relay] Listening for GDL90 on UDP :${UDP_PORT}`);
+  udp.bind(UDP_PORT, "0.0.0.0", () => {
+    console.log(`[relay] Listening for GDL90 on UDP 0.0.0.0:${UDP_PORT}`);
   });
 } catch (err) {
   console.error("[relay] UDP bind failed:", err.message);
@@ -89,7 +89,7 @@ try {
 
 // ── WebSocket server ──────────────────────────────────────────────────
 
-const wss = new WebSocketServer({ port: WS_PORT });
+const wss = new WebSocketServer({ port: WS_PORT, host: "0.0.0.0" });
 
 wss.on("error", (err) => {
   console.error(`[relay] WebSocket server error: ${err.message}`);
