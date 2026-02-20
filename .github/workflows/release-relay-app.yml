@@ -21,7 +21,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF#refs/tags/relay-app-v}"
           echo "Setting version to $VERSION"
-          cd relay-app && npm version "$VERSION" --no-git-tag-version
+          cd relay-app && npm version "$VERSION" --no-git-tag-version --allow-same-version
 
       - name: Install relay dependencies
         working-directory: relay
@@ -65,7 +65,7 @@ jobs:
           $version = "${{ github.ref_name }}" -replace '^relay-app-v', ''
           Write-Host "Setting version to $version"
           Set-Location relay-app
-          npm version $version --no-git-tag-version
+          npm version $version --no-git-tag-version --allow-same-version
         shell: pwsh
 
       - name: Install relay dependencies
