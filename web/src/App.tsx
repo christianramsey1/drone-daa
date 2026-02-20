@@ -516,7 +516,84 @@ function DroneCard({ drone, distNm }: {
 
 // ── Component ──────────────────────────────────────────────────────────
 
+// ── Access Gate (temporary) ─────────────────────────────────────────
+const ACCESS_CODE = "051474";
+const ACCESS_KEY = "dronedaa.access";
+
+function useAccessGate(): [boolean, (code: string) => boolean] {
+  const [granted, setGranted] = useState(
+    () => sessionStorage.getItem(ACCESS_KEY) === "1",
+  );
+  const tryCode = useCallback((code: string): boolean => {
+    if (code === ACCESS_CODE) {
+      sessionStorage.setItem(ACCESS_KEY, "1");
+      setGranted(true);
+      return true;
+    }
+    return false;
+  }, []);
+  return [granted, tryCode];
+}
+
+function AccessGate({ onSubmit }: { onSubmit: (code: string) => boolean }) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState(false);
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "center",
+      height: "100dvh", width: "100vw",
+      background: "#0d0d0d", color: "#fff", fontFamily: "system-ui, sans-serif",
+    }}>
+      <div style={{
+        display: "flex", flexDirection: "column", alignItems: "center",
+        gap: 16, padding: 32, maxWidth: 320,
+      }}>
+        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 1 }}>DroneDAA</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>
+          Enter access code to continue
+        </div>
+        <input
+          type="text"
+          inputMode="numeric"
+          autoFocus
+          value={code}
+          onChange={(e) => { setCode(e.target.value); setError(false); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              if (!onSubmit(code)) setError(true);
+            }
+          }}
+          style={{
+            width: "100%", padding: "10px 14px", fontSize: 18,
+            textAlign: "center", letterSpacing: 6,
+            background: "rgba(255,255,255,0.06)",
+            border: error ? "1px solid #ff453a" : "1px solid rgba(255,255,255,0.15)",
+            borderRadius: 8, color: "#fff", outline: "none",
+          }}
+          placeholder="------"
+        />
+        {error && (
+          <div style={{ fontSize: 12, color: "#ff453a" }}>Invalid code</div>
+        )}
+        <button
+          onClick={() => { if (!onSubmit(code)) setError(true); }}
+          style={{
+            width: "100%", padding: "10px 0", fontSize: 14, fontWeight: 600,
+            background: "rgba(0, 209, 255, 0.15)", color: "#00d1ff",
+            border: "1px solid rgba(0, 209, 255, 0.3)", borderRadius: 8,
+            cursor: "pointer",
+          }}
+        >
+          Enter
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [accessGranted, tryAccessCode] = useAccessGate();
+
   // Panel state
   const [panelOpen, setPanelOpen] = useState(true);
   const [panelTab, setPanelTab] = useState<PanelTab>(() => {
@@ -1099,6 +1176,8 @@ export default function App() {
 
   // ── Render ──────────────────────────────────────────────────────
 
+  if (!accessGranted) return <AccessGate onSubmit={tryAccessCode} />;
+
   return (
     <div className="appShell">
       {/* ── Map ── */}
@@ -1200,9 +1279,15 @@ export default function App() {
                 {mapLayer === "topo" && (
                   <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
                     <div className="sectionTitle" style={{ fontSize: 12, marginTop: 4 }}>Offline Maps</div>
-                    <p className="smallMuted" style={{ margin: 0, fontSize: 10, lineHeight: 1.4 }}>
-                      Downloads map tiles and enabled FAA layers for the current view.
-                      Toggle the layers you need above before downloading.
+                    <p style={{
+                      margin: 0, fontSize: 11, lineHeight: 1.4,
+                      color: "#ffd60a", fontWeight: 500,
+                      padding: "6px 8px", borderRadius: 6,
+                      background: "rgba(255, 214, 10, 0.1)",
+                      border: "1px solid rgba(255, 214, 10, 0.25)",
+                    }}>
+                      Downloads map tiles + any FAA layers enabled below.
+                      Select the airspace layers you need before downloading.
                     </p>
                     <button
                       className="chipBtn"
