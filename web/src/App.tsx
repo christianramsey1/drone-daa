@@ -1,6 +1,6 @@
 // web/src/App.tsx — DroneDAA
 import "./App.css";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MapKitMap, { type Annotation, type Polyline } from "./MapKitMap";
 import { getApiBaseUrl } from "./platform";
 import { useAdsb, type AdsbConnectionStatus } from "./services/useAdsb";
