@@ -1,10 +1,14 @@
 // relay/index.js — GDL90 UDP → WebSocket relay for DroneDAA
 // Listens on UDP 4000 for GDL90 binary from ADS-B receiver,
 // parses traffic/ownship, serves JSON snapshots via WebSocket on 4001.
+// Also serves the web app via reverse proxy to detectandavoid.com so
+// users can open http://localhost:4001 without mixed-content issues.
 
 /* eslint-disable no-console */
 "use strict";
 
+const http = require("node:http");
+const https = require("node:https");
 const dgram = require("node:dgram");
 const { WebSocketServer } = require("ws");
 const {
@@ -20,6 +24,7 @@ const UDP_PORT = 4000;
 const WS_PORT = 4001;
 const PUSH_INTERVAL_MS = 1000;   // 1 Hz state push
 const STALE_TIMEOUT_MS = 15000;  // Remove tracks not seen in 15s
+const UPSTREAM = "detectandavoid.com";
 
 // ── State ─────────────────────────────────────────────────────────────
 
@@ -87,16 +92,57 @@ try {
   console.error("[relay] UDP bind failed:", err.message);
 }
 
-// ── WebSocket server ──────────────────────────────────────────────────
+// ── HTTP server (reverse proxy to detectandavoid.com) ────────────────
+// Serves the web app on http://localhost:4001 so the browser can connect
+// WebSocket on the same origin without mixed-content blocking.
 
-const wss = new WebSocketServer({ port: WS_PORT, host: "0.0.0.0" });
+const server = http.createServer((req, res) => {
+  // Proxy everything to detectandavoid.com over HTTPS
+  const proxyOpts = {
+    hostname: UPSTREAM,
+    port: 443,
+    path: req.url,
+    method: req.method,
+    headers: {
+      ...req.headers,
+      host: UPSTREAM,
+      // Remove headers that would confuse the upstream
+      "accept-encoding": "identity",
+    },
+  };
 
-wss.on("error", (err) => {
-  console.error(`[relay] WebSocket server error: ${err.message}`);
+  const proxyReq = https.request(proxyOpts, (proxyRes) => {
+    // Copy status and headers, but strip HSTS/CSP that might cause issues
+    const headers = { ...proxyRes.headers };
+    delete headers["strict-transport-security"];
+    delete headers["content-security-policy"];
+    // Ensure browser doesn't upgrade to HTTPS
+    delete headers["upgrade-insecure-requests"];
+    res.writeHead(proxyRes.statusCode, headers);
+    proxyRes.pipe(res);
+  });
+
+  proxyReq.on("error", (err) => {
+    console.error(`[relay] Proxy error: ${err.message}`);
+    res.writeHead(502);
+    res.end("Relay proxy error — is the internet connected?");
+  });
+
+  req.pipe(proxyReq);
 });
 
-wss.on("listening", () => {
-  console.log(`[relay] WebSocket server on ws://localhost:${WS_PORT}`);
+server.on("error", (err) => {
+  console.error(`[relay] HTTP server error: ${err.message}`);
+});
+
+// ── WebSocket server (attached to HTTP server) ───────────────────────
+
+const wss = new WebSocketServer({ noServer: true });
+
+server.on("upgrade", (request, socket, head) => {
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    wss.emit("connection", ws, request);
+  });
 });
 
 wss.on("connection", (ws) => {
@@ -104,6 +150,10 @@ wss.on("connection", (ws) => {
   // Immediate snapshot on connect
   ws.send(JSON.stringify(buildSnapshot()));
   ws.on("close", () => console.log("[relay] Client disconnected"));
+});
+
+server.listen(WS_PORT, "0.0.0.0", () => {
+  console.log(`[relay] HTTP + WebSocket server on http://localhost:${WS_PORT}`);
 });
 
 // ── Periodic state push (1 Hz) ───────────────────────────────────────

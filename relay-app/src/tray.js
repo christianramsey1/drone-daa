@@ -57,12 +57,12 @@ function rebuildMenu(statusText) {
     ...statusLines,
     { type: "separator" },
     {
-      label: "Open DroneDAA Web",
-      click: () => shell.openExternal("https://detectandavoid.com"),
+      label: "Open DroneDAA",
+      click: () => shell.openExternal("http://localhost:4001"),
     },
     {
-      label: "Open localhost:5173",
-      click: () => shell.openExternal("http://localhost:5173"),
+      label: "Open detectandavoid.com",
+      click: () => shell.openExternal("https://detectandavoid.com"),
     },
     { type: "separator" },
     {

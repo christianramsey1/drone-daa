@@ -64,13 +64,17 @@ export function useRemoteId(): RidState & {
       wsRef.current = null;
     }
 
-    // In dev, Vite proxies /ws/rid → relay on 4002.
-    // In production, connect directly to local relay via explicit IPv4.
     const host = window.location.hostname;
-    const isDev = host === "localhost" || host === "127.0.0.1";
-    const wsUrl = isDev
-      ? `ws://${window.location.host}/ws/rid`
-      : "ws://127.0.0.1:4002";
+    const port = window.location.port;
+    const isLocalhost = host === "localhost" || host === "127.0.0.1";
+    // When served from relay (localhost:4001), RID is on port 4002
+    // In dev, Vite proxies /ws/rid → relay on 4002
+    // On production HTTPS, falls back to direct (may be blocked by mixed content)
+    const wsUrl = isLocalhost && port === "4001"
+      ? `ws://${host}:4002`
+      : isLocalhost
+        ? `ws://${window.location.host}/ws/rid`
+        : "ws://127.0.0.1:4002";
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 

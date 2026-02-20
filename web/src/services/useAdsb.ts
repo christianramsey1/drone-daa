@@ -42,14 +42,20 @@ const RECONNECT_MAX_MS = 30000;
 
 function getWsUrl(): string {
   const host = window.location.hostname;
-  const isDev = host === "localhost" || host === "127.0.0.1";
-  // In dev, Vite proxies /ws/adsb → relay on 4001.
-  // In production, connect directly to local relay via explicit IPv4.
-  // Using 127.0.0.1 instead of localhost because Windows often resolves
-  // localhost to ::1 (IPv6) which may not match the relay's IPv4 binding.
-  return isDev
-    ? `ws://${window.location.host}/ws/adsb`
-    : "ws://127.0.0.1:4001";
+  const port = window.location.port;
+  const isLocalhost = host === "localhost" || host === "127.0.0.1";
+
+  if (isLocalhost && port === "4001") {
+    // Running from relay's built-in HTTP server — same-origin WebSocket
+    return `ws://${window.location.host}`;
+  }
+  if (isLocalhost) {
+    // Dev mode — Vite proxies /ws/adsb → relay on 4001
+    return `ws://${window.location.host}/ws/adsb`;
+  }
+  // Production (detectandavoid.com) — direct to local relay
+  // May be blocked by mixed content; relay tray opens localhost:4001 instead
+  return "ws://127.0.0.1:4001";
 }
 
 export function useAdsb(): AdsbState {
