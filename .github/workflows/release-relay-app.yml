@@ -68,8 +68,10 @@ jobs:
 
       - name: Rename artifacts for download URL
         run: |
-          copy relay-app\dist\*.exe relay-app\dist\DroneDAA-Relay-Setup.exe 2>nul || true
-        shell: cmd
+          $exe = Get-ChildItem "relay-app/dist/*.exe" | Where-Object { $_.Name -like "*Setup*" } | Select-Object -First 1
+          if ($exe) { Copy-Item $exe.FullName "relay-app/dist/DroneDAA-Relay-Setup.exe" }
+          Get-ChildItem "relay-app/dist/*.exe" | ForEach-Object { Write-Host "$($_.Name) ($($_.Length) bytes)" }
+        shell: pwsh
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
