@@ -1,12 +1,14 @@
 // web/src/services/useFaaLayers.ts
 // React hook for fetching and managing FAA airspace layers from ArcGIS
+// Caches results in IndexedDB for offline field use.
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { AirspaceZone, AirspaceBbox, FaaLayerId, ObstructionPoint } from "./airspace";
 import { FAA_LAYERS, fetchAirspace, fetchObstructions } from "./airspace";
+import { cacheFaaLayer, getCachedFaaLayer } from "./offlineTiles";
 
 const FAA_ENABLED_KEY = "dronedaa.faaLayers";
-const DEBOUNCE_MS = 500;
+const DEBOUNCE_MS = 800;
 
 function loadEnabledLayers(): Set<FaaLayerId> {
   try {
@@ -25,6 +27,43 @@ export type FaaLayersState = {
   toggleLayer: (id: FaaLayerId) => void;
 };
 
+/** Try to fetch a layer from ArcGIS; on failure, fall back to IndexedDB cache. */
+async function fetchWithCache(
+  bbox: AirspaceBbox,
+  layer: typeof FAA_LAYERS[number],
+  signal: AbortSignal,
+): Promise<AirspaceZone[]> {
+  try {
+    const zones = await fetchAirspace(bbox, layer, signal);
+    // Cache in background (don't await — fire-and-forget)
+    cacheFaaLayer(layer.id, bbox, JSON.stringify(zones)).catch(() => {});
+    return zones;
+  } catch (err: any) {
+    // If aborted, don't fall back to cache — let the caller handle it
+    if (signal.aborted) throw err;
+    // Network failure → try IndexedDB cache
+    const cached = await getCachedFaaLayer(layer.id, bbox);
+    if (cached) return JSON.parse(cached) as AirspaceZone[];
+    return [];
+  }
+}
+
+async function fetchObsWithCache(
+  bbox: AirspaceBbox,
+  signal: AbortSignal,
+): Promise<ObstructionPoint[]> {
+  try {
+    const obs = await fetchObstructions(bbox, signal);
+    cacheFaaLayer("obstructions", bbox, JSON.stringify(obs)).catch(() => {});
+    return obs;
+  } catch (err: any) {
+    if (signal.aborted) throw err;
+    const cached = await getCachedFaaLayer("obstructions", bbox);
+    if (cached) return JSON.parse(cached) as ObstructionPoint[];
+    return [];
+  }
+}
+
 export function useFaaLayers(bbox: AirspaceBbox | null): FaaLayersState {
   const [enabledLayers, setEnabledLayers] = useState<Set<FaaLayerId>>(loadEnabledLayers);
   const [zones, setZones] = useState<AirspaceZone[]>([]);
@@ -32,6 +71,7 @@ export function useFaaLayers(bbox: AirspaceBbox | null): FaaLayersState {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Persist enabled layers
   useEffect(() => {
@@ -56,49 +96,58 @@ export function useFaaLayers(bbox: AirspaceBbox | null): FaaLayersState {
       return;
     }
 
+    // Debounce: clear any pending fetch, but DON'T abort in-flight requests
+    // so previous results stay visible until new ones arrive.
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
-    let cancelled = false;
-    const abort = new AbortController();
+    // Capture bbox/layers for this effect run
+    const currentBbox = bbox;
+    const currentEnabled = enabledLayers;
 
     debounceRef.current = setTimeout(() => {
+      // Abort any previous in-flight fetch now that we're starting a new one
+      if (abortRef.current) abortRef.current.abort();
+      const abort = new AbortController();
+      abortRef.current = abort;
+
       setLoading(true);
       setError(null);
 
-      // Separate polygon layers from point layers (obstructions)
-      const polygonLayers = FAA_LAYERS.filter((l) => enabledLayers.has(l.id) && l.id !== "obstructions");
-      const obstructionsEnabled = enabledLayers.has("obstructions");
+      const polygonLayers = FAA_LAYERS.filter(
+        (l) => currentEnabled.has(l.id) && l.id !== "obstructions",
+      );
+      const obstructionsEnabled = currentEnabled.has("obstructions");
 
       const polygonPromise = polygonLayers.length > 0
         ? Promise.all(
-            polygonLayers.map((layer) =>
-              fetchAirspace(bbox, layer, abort.signal).catch(() => [] as AirspaceZone[]),
-            ),
+            polygonLayers.map((layer) => fetchWithCache(currentBbox, layer, abort.signal)),
           ).then((results) => results.flat())
         : Promise.resolve([] as AirspaceZone[]);
 
       const obsPromise = obstructionsEnabled
-        ? fetchObstructions(bbox, abort.signal).catch(() => [] as ObstructionPoint[])
+        ? fetchObsWithCache(currentBbox, abort.signal)
         : Promise.resolve([] as ObstructionPoint[]);
 
       Promise.all([polygonPromise, obsPromise])
         .then(([zoneResults, obsResults]) => {
-          if (cancelled) return;
+          // Only update if this is still the active request
+          if (abort.signal.aborted) return;
           setZones(zoneResults);
           setObstructions(obsResults);
           setLoading(false);
         })
         .catch((err) => {
-          if (cancelled) return;
+          if (abort.signal.aborted) return;
+          // Keep existing zones on error — don't wipe them
           setError(err.message);
           setLoading(false);
         });
     }, DEBOUNCE_MS);
 
     return () => {
-      cancelled = true;
-      abort.abort();
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      // Note: we do NOT abort here — let in-flight requests complete
+      // so their results remain visible. The next fetch will abort them.
     };
   }, [bbox?.south, bbox?.west, bbox?.north, bbox?.east, enabledLayers]);
 

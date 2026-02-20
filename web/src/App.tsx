@@ -1200,6 +1200,10 @@ export default function App() {
                 {mapLayer === "topo" && (
                   <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
                     <div className="sectionTitle" style={{ fontSize: 12, marginTop: 4 }}>Offline Maps</div>
+                    <p className="smallMuted" style={{ margin: 0, fontSize: 10, lineHeight: 1.4 }}>
+                      Downloads map tiles and enabled FAA layers for the current view.
+                      Toggle the layers you need above before downloading.
+                    </p>
                     <button
                       className="chipBtn"
                       disabled={!!downloadProgress?.downloading}
