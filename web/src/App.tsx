@@ -519,7 +519,14 @@ function DroneCard({ drone, distNm }: {
 export default function App() {
   // Panel state
   const [panelOpen, setPanelOpen] = useState(true);
-  const [panelTab, setPanelTab] = useState<PanelTab>("maps");
+  const [panelTab, setPanelTab] = useState<PanelTab>(() => {
+    const visited = localStorage.getItem("dronedaa.visited");
+    if (!visited) {
+      localStorage.setItem("dronedaa.visited", "1");
+      return "howto";
+    }
+    return "maps";
+  });
   const [wizardDismissed, setWizardDismissed] = useState(false);
 
   // Map state — starts null, set once from first GPS fix
@@ -2174,7 +2181,7 @@ export default function App() {
                 <div className="sectionTitle">How To Use DroneDAA</div>
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>Getting Started</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>1. Getting Started</div>
                   <p className="smallMuted">
                     DroneDAA helps drone pilots detect and avoid manned aircraft
                     and other drones using ADS-B and Remote ID data. Center the map
@@ -2183,13 +2190,30 @@ export default function App() {
                 </div>
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>Relay App Setup</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>2. Download Maps for Offline Use</div>
+                  <p className="smallMuted">
+                    Your ADS-B receiver creates a WiFi hotspot that may not provide
+                    internet access. Before heading to the field, download map tiles
+                    for your flight area:
+                  </p>
+                  <ol className="smallMuted" style={{ margin: "6px 0 0 0", paddingLeft: 18 }}>
+                    <li>Go to the <strong>Maps</strong> tab and switch to <strong>Topo</strong> map layer.</li>
+                    <li>Navigate to your planned flight area and zoom to the level of detail you need.</li>
+                    <li>Tap <strong>Download Current View</strong> to cache tiles locally.</li>
+                    <li>Repeat for any additional areas you plan to fly.</li>
+                  </ol>
+                  <p className="smallMuted" style={{ marginTop: 4 }}>
+                    Only Topo maps support offline caching. Apple satellite maps require an internet connection.
+                  </p>
+                </div>
+
+                <div className="kv">
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>3. Install the Relay App</div>
                   <p className="smallMuted">
                     ADS-B and Remote ID data require the DroneDAA Relay app
                     running on your computer. Download the installer for macOS
-                    or Windows from the setup guide. The relay runs as a small
-                    icon in your menu bar (Mac) or system tray (Windows) — no
-                    configuration needed.
+                    or Windows. The relay runs as a small icon in your menu bar
+                    (Mac) or system tray (Windows) — no configuration needed.
                   </p>
                   <button
                     className="chipBtn"
@@ -2201,39 +2225,38 @@ export default function App() {
                 </div>
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>ADS-B Traffic (Flights Tab)</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>4. Connect ADS-B Receiver</div>
                   <p className="smallMuted">
                     Power on your GDL-90 receiver and connect this device to the
-                    receiver's WiFi hotspot. The receiver hotspot may not provide
-                    internet access — download offline maps beforehand if needed.
-                    The relay listens on UDP port 4000 for GDL-90 data and forwards
-                    it to the web app. Aircraft are color-coded by alert level.
+                    receiver's WiFi hotspot. The relay listens on UDP port 4000
+                    for GDL-90 data and forwards it to the web app. Aircraft
+                    appear on the map color-coded by alert level.
                   </p>
                 </div>
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>Alert Volumes (Alerts Tab)</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>5. Configure Alert Volumes</div>
                   <p className="smallMuted">
-                    Configure caution (yellow) and warning (red) rings around your position.
-                    Set the range in nautical miles and altitude ceiling in feet.
-                    When aircraft enter these volumes, you'll receive audio beeps
-                    and haptic vibration alerts.
+                    Go to the <strong>Alerts</strong> tab and configure caution (yellow) and warning (red)
+                    rings around your position. Set the range in nautical miles and altitude
+                    ceiling in feet. When aircraft enter these volumes, you'll receive
+                    audio beeps and haptic vibration alerts.
                   </p>
                 </div>
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>FAA Airspace (Maps Tab)</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>6. FAA Airspace</div>
                   <p className="smallMuted">
-                    Toggle FAA airspace classes (B/C/D/E), TFRs, restricted areas,
-                    security zones, and LAANC grid overlays from the Maps tab. Data
-                    is fetched live from FAA ArcGIS services. Tap any airspace zone,
-                    obstruction, aircraft, or drone to see details on the Details tab.
+                    On the <strong>Maps</strong> tab, toggle FAA airspace classes (B/C/D/E), TFRs, restricted areas,
+                    security zones, and LAANC grid overlays. Data is fetched live
+                    from FAA ArcGIS services. Tap any airspace zone, obstruction,
+                    aircraft, or drone to see details on the Details tab.
                     Always check NOTAMs before flight.
                   </p>
                 </div>
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>Remote ID (Remote ID Tab)</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>7. Remote ID</div>
                   <p className="smallMuted">
                     Detects nearby drones broadcasting Remote ID per ASTM F3586-22.
                     Supports all broadcast types: Bluetooth 5 (Long Range and Legacy),
@@ -2244,16 +2267,7 @@ export default function App() {
                 </div>
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>Maps & Offline</div>
-                  <p className="smallMuted">
-                    Choose between Apple satellite/hybrid maps or OpenTopoMap.
-                    Switch to Topo and use "Download Current View" to cache tiles
-                    for offline field use. Only Topo maps support offline caching.
-                  </p>
-                </div>
-
-                <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>Weather</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>8. Weather</div>
                   <p className="smallMuted">
                     View current conditions, wind speed and direction, visibility,
                     cloud cover, and a 12-hour hourly forecast. The next-hour
