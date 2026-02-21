@@ -2,7 +2,7 @@
 // Scans for Open Drone ID broadcasts via BLE and WiFi, serves to web app via WebSocket.
 //
 // Architecture:
-//   - BLE scanning via @abandonware/noble (when available)
+//   - BLE scanning via @stoprocent/noble (when available)
 //   - WiFi beacon monitoring via pcap/monitor mode (when available)
 //   - HTTP POST ingest at /api/rid for external RID sources (always available)
 //   - WebSocket server at WS_PORT pushes RID snapshots to connected clients
@@ -43,7 +43,7 @@ let noble = null;
 
 function initBle() {
   try {
-    noble = require("@abandonware/noble");
+    noble = require("@stoprocent/noble");
     bleAvailable = true;
     console.log("[rid] BLE scanning available via noble");
 
@@ -58,8 +58,8 @@ function initBle() {
       handleBleAdvertisement(peripheral);
     });
   } catch {
-    console.log("[rid] BLE scanning not available (install @abandonware/noble for BLE support)");
-    console.log("[rid]   npm install @abandonware/noble");
+    console.log("[rid] BLE scanning not available (install @stoprocent/noble for BLE support)");
+    console.log("[rid]   npm install @stoprocent/noble");
     console.log("[rid]   (requires system Bluetooth libraries)");
   }
 }

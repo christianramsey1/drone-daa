@@ -15,11 +15,18 @@
     "ws": "^8.19.0"
   },
   "optionalDependencies": {
-    "@abandonware/noble": "^1.9.2-24"
+    "@stoprocent/noble": "^2.3.16"
   },
   "engines": {
     "node": ">=18"
   },
-  "keywords": ["drone", "adsb", "gdl90", "remote-id", "odid", "astm-f3411"],
+  "keywords": [
+    "drone",
+    "adsb",
+    "gdl90",
+    "remote-id",
+    "odid",
+    "astm-f3411"
+  ],
   "license": "MIT"
 }
