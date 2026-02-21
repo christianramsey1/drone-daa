@@ -2304,6 +2304,16 @@ export default function App() {
                     or Windows. The relay runs as a small icon in your menu bar
                     (Mac) or system tray (Windows) — no configuration needed.
                   </p>
+                  <p className="smallMuted" style={{ marginTop: 4 }}>
+                    <strong>macOS:</strong> After installing, if macOS says the app is
+                    "damaged", open Terminal and run:<br />
+                    <code style={{ fontSize: 11, color: "#00d1ff", background: "rgba(0,209,255,0.08)", padding: "2px 6px", borderRadius: 4, display: "inline-block", marginTop: 4 }}>
+                      xattr -cr /Applications/DroneDAA\ Relay.app
+                    </code><br />
+                    <span style={{ fontSize: 10, opacity: 0.6 }}>
+                      This removes the quarantine flag from unsigned downloads.
+                    </span>
+                  </p>
                   <button
                     className="chipBtn"
                     style={{ marginTop: 8 }}
