@@ -35,7 +35,7 @@ export function ConnectionWizard({
         : `Download the relay app for ${osLabel}. It runs as a small icon in your ${os === "mac" ? "menu bar" : "system tray"}.`,
       done: relayConnected,
       active: !relayConnected,
-      content: !relayConnected ? (
+      content: (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <a
             href={downloadUrl}
@@ -44,7 +44,7 @@ export function ConnectionWizard({
             className="chipBtn"
             style={{ display: "inline-block", textDecoration: "none", textAlign: "center" }}
           >
-            Download for {osLabel}
+            {relayConnected ? `Download Latest for ${osLabel}` : `Download for ${osLabel}`}
           </a>
           {os === "linux" && (
             <p className="smallMuted">
@@ -57,7 +57,7 @@ export function ConnectionWizard({
             </p>
           )}
         </div>
-      ) : undefined,
+      ),
     },
     {
       title: "Run the Relay App",
@@ -163,7 +163,7 @@ function WizardStep({ stepNumber, title, description, done, active, content }: S
           <div className="smallMuted" style={{ marginTop: 2 }}>{description}</div>
         </div>
       </div>
-      {content && active && (
+      {content && (
         <div style={{ marginTop: 8, marginLeft: 34 }}>
           {content}
         </div>
