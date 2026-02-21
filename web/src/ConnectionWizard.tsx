@@ -46,6 +46,19 @@ export function ConnectionWizard({
           >
             {relayConnected ? `Download Latest for ${osLabel}` : `Download for ${osLabel}`}
           </a>
+          {os === "mac" && (
+            <div style={{
+              fontSize: 11, lineHeight: 1.4, color: "#ffd60a",
+              padding: "6px 8px", borderRadius: 6,
+              background: "rgba(255, 214, 10, 0.1)",
+              border: "1px solid rgba(255, 214, 10, 0.25)",
+            }}>
+              If macOS says the app is "damaged", open Terminal and run:<br />
+              <code style={{ fontSize: 11, color: "#00d1ff", background: "rgba(0,209,255,0.08)", padding: "2px 6px", borderRadius: 4, display: "inline-block", marginTop: 4 }}>
+                xattr -cr /Applications/DroneDAA\ Relay.app
+              </code>
+            </div>
+          )}
           {os === "linux" && (
             <p className="smallMuted">
               Linux: install Node.js 18+ and run <code>node relay/start.js</code> from the repo.
