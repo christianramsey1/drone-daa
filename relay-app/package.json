@@ -1,6 +1,6 @@
 {
   "name": "dronedaa-relay-app",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "DroneDAA Relay — system tray app for ADS-B and Remote ID bridging",
   "author": "DroneDAA",
   "repository": "github:christianramsey1/drone-daa",
