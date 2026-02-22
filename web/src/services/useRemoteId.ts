@@ -202,9 +202,10 @@ export function useRemoteId(): RidState & {
     return () => clearInterval(interval);
   }, [syncState]);
 
-  // Cleanup on unmount
+  // Auto-start scanning on mount and cleanup on unmount
   useEffect(() => {
     mountedRef.current = true;
+    startScan();
     return () => {
       mountedRef.current = false;
       if (wsRef.current) {
@@ -216,7 +217,7 @@ export function useRemoteId(): RidState & {
         reconnectRef.current = null;
       }
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { ...state, startScan, stopScan };
 }
