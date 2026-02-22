@@ -531,6 +531,14 @@ function DroneCard({ drone, distNm, alertLevel, isMyDrone, nickname }: {
         }}>
           {broadcastTypeLabel(drone.broadcastType)}
         </span>
+        {drone.lat === 0 && drone.lon === 0 && (
+          <span style={{
+            padding: "1px 5px", borderRadius: 4,
+            background: "rgba(255,34,0,0.15)", color: "#ff453a",
+          }}>
+            No GPS
+          </span>
+        )}
         {locLabel && (
           <span style={{
             padding: "1px 5px", borderRadius: 4,
@@ -1101,6 +1109,8 @@ export default function App() {
   const droneAnnotations: Annotation[] = useMemo(() => {
     const result: Annotation[] = [];
     for (const drone of sortedDrones) {
+      // Skip drones without a GPS fix (0,0) from the map
+      if (drone.lat === 0 && drone.lon === 0) continue;
       result.push({
         id: `rid-${drone.id}`,
         lat: drone.lat,
@@ -1139,6 +1149,7 @@ export default function App() {
   const droneOperatorLines: Polyline[] = useMemo(() => {
     const lines: Polyline[] = [];
     for (const drone of sortedDrones) {
+      if (drone.lat === 0 && drone.lon === 0) continue;
       const opLat = drone.operatorLat ?? drone.takeoffLat;
       const opLon = drone.operatorLon ?? drone.takeoffLon;
       if (opLat != null && opLon != null) {

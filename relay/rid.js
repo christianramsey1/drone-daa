@@ -347,7 +347,7 @@ setInterval(() => {
 function buildSnapshot() {
   const droneList = [];
   for (const [, entry] of drones) {
-    if (entry.track && entry.track.lat !== 0 && entry.track.lon !== 0) {
+    if (entry.track) {
       droneList.push(entry.track);
     }
   }
