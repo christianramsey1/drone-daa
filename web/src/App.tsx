@@ -94,6 +94,24 @@ function loadAlertVolumes(): AlertVolumeSettings {
   return DEFAULT_ALERT_VOLUMES;
 }
 
+// ── "My Drone" designation (excluded from alerts) ────────────────────
+
+const MY_DRONES_KEY = "dronedaa.myDrones";
+
+// Map<droneId, nickname> — empty string means no custom name yet
+function loadMyDrones(): Map<string, string> {
+  try {
+    const stored = localStorage.getItem(MY_DRONES_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Support old format (string[]) and new format ({id:name}[])
+      if (Array.isArray(parsed)) return new Map(parsed.map((id: string) => [id, ""]));
+      if (typeof parsed === "object") return new Map(Object.entries(parsed));
+    }
+  } catch { /* ignore */ }
+  return new Map();
+}
+
 // ── Center source for range rings / distance calculations ─────────────
 
 type CenterSourceKind =
@@ -459,9 +477,12 @@ function RidStatusBadge({ status }: { status: RidConnectionStatus }) {
   );
 }
 
-function DroneCard({ drone, distNm }: {
+function DroneCard({ drone, distNm, alertLevel, isMyDrone, nickname }: {
   drone: DroneTrack & { _distNm?: number };
   distNm?: number;
+  alertLevel?: AlertLevel;
+  isMyDrone?: boolean;
+  nickname?: string;
 }) {
   const vertChar = drone.vertRateFpm
     ? drone.vertRateFpm > 100 ? "\u2191"
@@ -470,13 +491,23 @@ function DroneCard({ drone, distNm }: {
     : "";
 
   const idLabel = drone.serialNumber ?? drone.sessionId ?? drone.id;
+  const displayName = nickname || idLabel;
   const locLabel = drone.operatorLat != null ? "Operator" : drone.takeoffLat != null ? "Takeoff" : null;
 
+  const alertColor = alertLevel === "warning" ? "#ff2200"
+    : alertLevel === "caution" ? "#ffee00"
+    : undefined;
+  const alertBg = alertLevel === "warning" ? "rgba(255, 34, 0, 0.2)"
+    : alertLevel === "caution" ? "rgba(255, 238, 0, 0.15)"
+    : undefined;
+
   return (
-    <div className="listItem" style={{ display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px" }}>
+    <div className="listItem" style={{ display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", borderColor: alertColor, background: alertBg }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {alertColor && <div style={{ width: 6, height: 6, borderRadius: 3, background: alertColor, flexShrink: 0 }} />}
+        {isMyDrone && <span style={{ fontSize: 9, color: "#30d158", fontWeight: 700, flexShrink: 0 }}>MY</span>}
         <span style={{ fontWeight: 600, fontSize: 12, minWidth: 64, flexShrink: 0 }}>
-          {idLabel.length > 12 ? idLabel.slice(0, 12) + "\u2026" : idLabel}
+          {displayName.length > 12 ? displayName.slice(0, 12) + "\u2026" : displayName}
         </span>
         <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {Math.round(drone.altFt)} ft{vertChar} · {Math.round(drone.speedKts)} kts
@@ -692,6 +723,35 @@ export default function App() {
     localStorage.setItem(ALERT_VOLUMES_KEY, JSON.stringify(alertVolumes));
   }, [alertVolumes]);
 
+  // "My Drones" designation — excluded from alerts
+  // Map<droneId, nickname>
+  const [myDrones, setMyDrones] = useState<Map<string, string>>(loadMyDrones);
+
+  const toggleMyDrone = (id: string) => {
+    setMyDrones((prev) => {
+      const next = new Map(prev);
+      if (next.has(id)) next.delete(id);
+      else next.set(id, "");
+      return next;
+    });
+  };
+
+  const renameMyDrone = (id: string, name: string) => {
+    setMyDrones((prev) => {
+      const next = new Map(prev);
+      next.set(id, name);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (myDrones.size > 0) {
+      localStorage.setItem(MY_DRONES_KEY, JSON.stringify(Object.fromEntries(myDrones)));
+    } else {
+      localStorage.removeItem(MY_DRONES_KEY);
+    }
+  }, [myDrones]);
+
   // Position history for breadcrumbs
   const posHistoryRef = useRef<Map<string, Array<{ lat: number; lon: number }>>>(new Map());
 
@@ -848,28 +908,51 @@ export default function App() {
     }
   }, [adsb.aircraft, aircraftDisplay.trailingBreadcrumbs]);
 
+  // ── Sorted drones by distance ─────────────────────────────────────
+
+  type DroneWithDist = DroneTrack & { _distNm?: number; _alertLevel: AlertLevel };
+
+  const sortedDrones: DroneWithDist[] = useMemo(() => {
+    const center = resolvedCenter;
+    const list: DroneWithDist[] = rid.drones.map((d) => {
+      const dist = center ? distanceNm(center, d) : undefined;
+      const alert: AlertLevel = myDrones.has(d.id)
+        ? "normal"
+        : computeAlertLevel(dist, d.altFt, alertVolumes);
+      return { ...d, _distNm: dist, _alertLevel: alert };
+    });
+    if (center) list.sort((a, b) => (a._distNm ?? 99999) - (b._distNm ?? 99999));
+    return list;
+  }, [rid.drones, resolvedCenter, alertVolumes, myDrones]);
+
   // ── Alert transition detection ──────────────────────────────────
 
   useEffect(() => {
     const prev = prevAlertRef.current;
     const levels: Record<AlertLevel, number> = { normal: 0, caution: 1, warning: 2 };
 
-    for (const ac of sortedAircraft) {
-      const curLevel = ac._alertLevel;
-      const prevLevel = prev.get(ac.id) ?? "normal";
+    // Check both aircraft and drones for alert transitions
+    const allAlertable: Array<{ id: string; _alertLevel: AlertLevel }> = [
+      ...sortedAircraft,
+      ...sortedDrones,
+    ];
+
+    for (const item of allAlertable) {
+      const curLevel = item._alertLevel;
+      const prevLevel = prev.get(item.id) ?? "normal";
 
       if (levels[curLevel] > levels[prevLevel]) {
         if (alertVolumes.soundEnabled) playAlertTone(curLevel);
         if (alertVolumes.hapticEnabled) hapticPulse(curLevel);
       }
-      prev.set(ac.id, curLevel);
+      prev.set(item.id, curLevel);
     }
 
-    const currentIds = new Set(sortedAircraft.map((a) => a.id));
+    const currentIds = new Set(allAlertable.map((a) => a.id));
     for (const id of prev.keys()) {
       if (!currentIds.has(id)) prev.delete(id);
     }
-  }, [sortedAircraft, alertVolumes.soundEnabled, alertVolumes.hapticEnabled]);
+  }, [sortedAircraft, sortedDrones, alertVolumes.soundEnabled, alertVolumes.hapticEnabled]);
 
   // ── Aircraft annotations from ADS-B ──────────────────────────────
 
@@ -964,9 +1047,11 @@ export default function App() {
     // Range rings (centered on resolvedCenter)
     const center = resolvedCenter;
     if (center) {
-      // Determine active alert states for ring fills
-      const hasWarning = sortedAircraft.some((ac) => ac._alertLevel === "warning");
-      const hasCaution = sortedAircraft.some((ac) => ac._alertLevel === "caution" || ac._alertLevel === "warning");
+      // Determine active alert states for ring fills (aircraft + drones)
+      const hasWarning = sortedAircraft.some((ac) => ac._alertLevel === "warning")
+        || sortedDrones.some((d) => d._alertLevel === "warning");
+      const hasCaution = sortedAircraft.some((ac) => ac._alertLevel === "caution" || ac._alertLevel === "warning")
+        || sortedDrones.some((d) => d._alertLevel === "caution" || d._alertLevel === "warning");
 
       if (alertVolumes.outerEnabled) {
         lines.push({
@@ -995,7 +1080,7 @@ export default function App() {
     }
 
     return lines;
-  }, [sortedAircraft, aircraftDisplay.velocityVector, resolvedCenter, alertVolumes]);
+  }, [sortedAircraft, sortedDrones, aircraftDisplay.velocityVector, resolvedCenter, alertVolumes]);
 
   // ── FAA airspace polylines ───────────────────────────────────────
 
@@ -1010,20 +1095,6 @@ export default function App() {
       fillOpacity: zone.type === "laanc" ? 0.25 : 0.12,
     }));
   }, [faa.zones]);
-
-  // ── Sorted drones by distance ─────────────────────────────────────
-
-  type DroneWithDist = DroneTrack & { _distNm?: number };
-
-  const sortedDrones: DroneWithDist[] = useMemo(() => {
-    const center = resolvedCenter;
-    const list: DroneWithDist[] = rid.drones.map((d) => {
-      const dist = center ? distanceNm(center, d) : undefined;
-      return { ...d, _distNm: dist };
-    });
-    if (center) list.sort((a, b) => (a._distNm ?? 99999) - (b._distNm ?? 99999));
-    return list;
-  }, [rid.drones, resolvedCenter]);
 
   // ── Drone annotations for map ─────────────────────────────────────
 
@@ -1041,10 +1112,10 @@ export default function App() {
         heading: drone.headingDeg,
         iconSize: 28,
         dataTagLines: [
-          (drone.serialNumber ?? drone.sessionId ?? drone.id).slice(0, 12),
+          (myDrones.get(drone.id) || (drone.serialNumber ?? drone.sessionId ?? drone.id)).slice(0, 12),
           `${Math.round(drone.altFt)} ft ${Math.round(drone.speedKts)} kts`,
         ],
-        alertLevel: "normal",
+        alertLevel: drone._alertLevel,
       });
 
       // Operator / takeoff location marker
@@ -1625,6 +1696,79 @@ export default function App() {
                     Center: {resolvedCenter.lat.toFixed(4)}, {resolvedCenter.lon.toFixed(4)}
                   </div>
                 )}
+
+                <div className="divider" />
+
+                {/* ── My Drones ── */}
+                <div className="sectionTitle">My Drones</div>
+                <p className="smallMuted">
+                  Mark your drones to exclude them from proximity alerts.
+                </p>
+
+                {myDrones.size > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {[...myDrones.entries()].map(([id, nickname]) => {
+                      const drone = sortedDrones.find((d) => d.id === id);
+                      const rawLabel = drone
+                        ? (drone.serialNumber ?? drone.sessionId ?? drone.id)
+                        : id;
+                      return (
+                        <div key={id} style={{
+                          padding: "6px 8px",
+                          background: "rgba(255,255,255,0.05)",
+                          borderRadius: 8,
+                          borderLeft: `3px solid ${drone ? "#30d158" : "#ffd60a"}`,
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: drone ? "#30d158" : "#ffd60a" }}>
+                              {nickname || (rawLabel.length > 16 ? rawLabel.slice(0, 16) + "\u2026" : rawLabel)}
+                            </div>
+                            <button className="chipBtn compact" onClick={() => toggleMyDrone(id)}>
+                              Remove
+                            </button>
+                          </div>
+                          {nickname && (
+                            <div className="smallMuted" style={{ fontSize: 10 }}>
+                              {rawLabel.length > 20 ? rawLabel.slice(0, 20) + "\u2026" : rawLabel}
+                            </div>
+                          )}
+                          <input
+                            type="text"
+                            placeholder="Name this drone..."
+                            value={nickname}
+                            onChange={(e) => renameMyDrone(id, e.target.value)}
+                            style={{
+                              marginTop: 4,
+                              width: "100%",
+                              background: "rgba(255,255,255,0.08)",
+                              border: "1px solid rgba(255,255,255,0.15)",
+                              borderRadius: 6,
+                              color: "white",
+                              padding: "4px 8px",
+                              fontSize: 11,
+                              outline: "none",
+                              boxSizing: "border-box",
+                            }}
+                          />
+                          <span className="smallMuted" style={{ fontSize: 10 }}>
+                            {drone ? "Alert exclusion active" : "Not currently detected"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <button
+                      className="chipBtn compact"
+                      style={{ alignSelf: "flex-start", marginTop: 2 }}
+                      onClick={() => setMyDrones(new Map())}
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                ) : (
+                  <span className="smallMuted">
+                    No drones designated. Open the Remote ID tab and select a drone to mark it.
+                  </span>
+                )}
               </div>
             )}
 
@@ -1803,16 +1947,21 @@ export default function App() {
                     ? drone.vertRateFpm > 100 ? "\u2191" : drone.vertRateFpm < -100 ? "\u2193" : ""
                     : "";
                   const idLabel = drone.serialNumber ?? drone.sessionId ?? drone.id;
+                  const isMine = myDrones.has(drone.id);
+                  const droneName = myDrones.get(drone.id) || "";
+                  const droneAlertColor = drone._alertLevel === "warning" ? "#ff2200"
+                    : drone._alertLevel === "caution" ? "#ffee00"
+                    : isMine ? "#30d158" : "#ffa500";
                   return (
                     <div className="kv" style={{
                       padding: 8,
                       background: "rgba(255,255,255,0.05)",
                       borderRadius: 8,
-                      borderLeft: "3px solid #ffa500",
+                      borderLeft: `3px solid ${droneAlertColor}`,
                     }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>
-                          {idLabel.length > 20 ? idLabel.slice(0, 20) + "\u2026" : idLabel}
+                          {droneName || (idLabel.length > 20 ? idLabel.slice(0, 20) + "\u2026" : idLabel)}
                         </div>
                         <span
                           style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: "0 2px" }}
@@ -1821,9 +1970,51 @@ export default function App() {
                           dismiss
                         </span>
                       </div>
-                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>
-                        Remote ID Drone
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+                        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
+                          Remote ID Drone
+                        </span>
+                        <button
+                          style={{
+                            marginLeft: "auto",
+                            fontSize: 10,
+                            padding: "2px 8px",
+                            borderRadius: 4,
+                            border: isMine ? "1px solid #30d158" : "1px solid rgba(255,255,255,0.2)",
+                            background: isMine ? "rgba(48, 209, 88, 0.15)" : "rgba(255,255,255,0.08)",
+                            color: isMine ? "#30d158" : "rgba(255,255,255,0.6)",
+                            cursor: "pointer",
+                          }}
+                          onClick={() => toggleMyDrone(drone.id)}
+                        >
+                          {isMine ? "My Drone" : "Mark as Mine"}
+                        </button>
                       </div>
+                      {isMine && (
+                        <input
+                          type="text"
+                          placeholder="Name this drone..."
+                          value={droneName}
+                          onChange={(e) => renameMyDrone(drone.id, e.target.value)}
+                          style={{
+                            marginTop: 6,
+                            width: "100%",
+                            background: "rgba(255,255,255,0.08)",
+                            border: "1px solid rgba(255,255,255,0.15)",
+                            borderRadius: 6,
+                            color: "white",
+                            padding: "4px 8px",
+                            fontSize: 11,
+                            outline: "none",
+                            boxSizing: "border-box" as const,
+                          }}
+                        />
+                      )}
+                      {droneName && (
+                        <div className="smallMuted" style={{ fontSize: 10, marginTop: 2 }}>
+                          ID: {idLabel.length > 24 ? idLabel.slice(0, 24) + "\u2026" : idLabel}
+                        </div>
+                      )}
                       <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 13 }}>
                         <div>
                           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Altitude</div>
@@ -2244,7 +2435,7 @@ export default function App() {
                         setSelectedAircraft(null);
                         setPanelTab("details");
                       }}>
-                        <DroneCard drone={d} distNm={d._distNm} />
+                        <DroneCard drone={d} distNm={d._distNm} alertLevel={d._alertLevel} isMyDrone={myDrones.has(d.id)} nickname={myDrones.get(d.id)} />
                       </div>
                     ))}
                   </div>
