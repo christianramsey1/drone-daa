@@ -1985,6 +1985,26 @@ export default function App() {
                         <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
                           Remote ID Drone
                         </span>
+                        <span style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          padding: "1px 6px",
+                          borderRadius: 4,
+                          background: drone.operationalStatus === "airborne" ? "rgba(0, 180, 255, 0.15)"
+                            : drone.operationalStatus === "ground" ? "rgba(180, 140, 60, 0.2)"
+                            : drone.operationalStatus === "emergency" || drone.operationalStatus === "systemFailure" ? "rgba(255, 0, 0, 0.2)"
+                            : "rgba(255,255,255,0.08)",
+                          color: drone.operationalStatus === "airborne" ? "#00b4ff"
+                            : drone.operationalStatus === "ground" ? "#c8a84e"
+                            : drone.operationalStatus === "emergency" || drone.operationalStatus === "systemFailure" ? "#ff4444"
+                            : "rgba(255,255,255,0.5)",
+                        }}>
+                          {drone.operationalStatus === "airborne" ? "Airborne"
+                            : drone.operationalStatus === "ground" ? "On Ground"
+                            : drone.operationalStatus === "emergency" ? "EMERGENCY"
+                            : drone.operationalStatus === "systemFailure" ? "SYS FAIL"
+                            : "Unknown"}
+                        </span>
                         <button
                           style={{
                             marginLeft: "auto",
@@ -2051,9 +2071,6 @@ export default function App() {
                         </span>
                         <span style={{ padding: "1px 5px", borderRadius: 4, background: "rgba(255,255,255,0.08)" }}>
                           {broadcastTypeLabel(drone.broadcastType)}
-                        </span>
-                        <span style={{ padding: "1px 5px", borderRadius: 4, background: "rgba(255,255,255,0.08)" }}>
-                          {drone.operationalStatus}
                         </span>
                       </div>
                       {(drone.operatorLat != null || drone.takeoffLat != null) && (
