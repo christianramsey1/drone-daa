@@ -29,7 +29,7 @@ const INITIAL_STATE: RidState = {
   error: null,
 };
 
-const STALE_TIMEOUT_MS = 15_000; // Remove drones not seen in 15s
+const STALE_TIMEOUT_MS = 30_000; // Remove drones not seen in 30s
 const WS_RECONNECT_BASE_MS = 2_000;
 const WS_RECONNECT_MAX_MS = 10_000;
 

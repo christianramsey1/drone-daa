@@ -60,7 +60,7 @@ public class RemoteIdPlugin: CAPPlugin, CAPBridgedPlugin {
     private let queue = DispatchQueue(label: "com.dronedaa.rid", qos: .userInitiated)
     private var pushTimer: DispatchSourceTimer?
 
-    private let staleTimeoutSec: TimeInterval = 15.0
+    private let staleTimeoutSec: TimeInterval = 30.0
 
     // MARK: - Plugin Methods
 

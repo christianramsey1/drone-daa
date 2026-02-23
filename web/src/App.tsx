@@ -2297,6 +2297,33 @@ export default function App() {
                     </button>
                   </div>
                 )}
+
+                {/* Recommended receiver */}
+                <div style={{
+                  marginTop: 16, padding: 12, borderRadius: 10,
+                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                }}>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
+                    Recommended Receiver
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>
+                    uAvionix skyAlert
+                  </div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginTop: 4, lineHeight: 1.4 }}>
+                    Portable ADS-B receiver with built-in GPS and configurable audible traffic alerts. Outputs GDL-90 over WiFi — works directly with DroneDAA on iOS and desktop.
+                  </div>
+                  <a
+                    href="https://uavionix.com/products/skyalert/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "inline-block", marginTop: 8, fontSize: 11, color: "#0a84ff",
+                      textDecoration: "none",
+                    }}
+                  >
+                    uavionix.com/products/skyalert &rarr;
+                  </a>
+                </div>
               </div>
             )}
 

@@ -24,7 +24,7 @@ const { parseOdidMessage, assembleTrack, MSG_TYPE } = require("./odid.js");
 const WS_PORT = 4002;
 const HTTP_PORT = 4003;
 const PUSH_INTERVAL_MS = 1000;
-const STALE_TIMEOUT_MS = 15000;
+const STALE_TIMEOUT_MS = 30000;
 
 // ── State ─────────────────────────────────────────────────────────────
 
