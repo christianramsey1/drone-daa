@@ -53,5 +53,13 @@
 	<string>DroneDAA uses your location to show your position on the map and provide proximity alerts for nearby aircraft.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>DroneDAA uses Bluetooth to detect nearby drones broadcasting Remote ID signals for airspace awareness.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>DroneDAA receives ADS-B flight data from your local ADS-B receiver over the local network.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_gdl90._udp</string>
+	</array>
 </dict>
 </plist>

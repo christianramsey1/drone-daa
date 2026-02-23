@@ -1128,10 +1128,10 @@ export default function App() {
         alertLevel: drone._alertLevel,
       });
 
-      // Operator / takeoff location marker
+      // Operator / takeoff location marker (skip 0,0 — means no fix)
       const opLat = drone.operatorLat ?? drone.takeoffLat;
       const opLon = drone.operatorLon ?? drone.takeoffLon;
-      if (opLat != null && opLon != null) {
+      if (opLat != null && opLon != null && (opLat !== 0 || opLon !== 0)) {
         result.push({
           id: `rid-op-${drone.id}`,
           lat: opLat,
@@ -1152,7 +1152,7 @@ export default function App() {
       if (drone.lat === 0 && drone.lon === 0) continue;
       const opLat = drone.operatorLat ?? drone.takeoffLat;
       const opLon = drone.operatorLon ?? drone.takeoffLon;
-      if (opLat != null && opLon != null) {
+      if (opLat != null && opLon != null && (opLat !== 0 || opLon !== 0)) {
         lines.push({
           id: `rid-link-${drone.id}`,
           points: [
@@ -1664,7 +1664,7 @@ export default function App() {
                       </span>
                       <select
                         style={{
-                          background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+                          backgroundColor: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
                           borderRadius: 8, color: "white", padding: "6px 8px", fontSize: 12, width: "100%",
                         }}
                         value={src.kind === "ridDrone" ? `ridDrone:${src.ridDroneId ?? ""}` : src.kind}
@@ -1681,9 +1681,9 @@ export default function App() {
                       >
                         <option value="deviceGps">{CENTER_SOURCE_LABELS.deviceGps}</option>
                         <option value="gdl90Gps">{CENTER_SOURCE_LABELS.gdl90Gps}</option>
-                        {rid.drones.map((d) => (
+                        {rid.drones.filter((d) => myDrones.has(d.id)).map((d) => (
                           <option key={d.id} value={`ridDrone:${d.id}`}>
-                            Drone: {(d.serialNumber ?? d.sessionId ?? d.id).slice(0, 16)}
+                            {myDrones.get(d.id) || "My Drone"}: {(d.serialNumber ?? d.sessionId ?? d.id).slice(0, 16)}
                           </option>
                         ))}
                         <option value="tapMap">{CENTER_SOURCE_LABELS.tapMap}</option>

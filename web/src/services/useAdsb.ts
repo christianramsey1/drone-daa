@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { isNative } from "../platform";
 import type { AircraftTrack, AdsbSnapshot } from "./adsb";
+import { GDL90 } from "./GDL90Plugin";
 
 export type AdsbConnectionStatus =
   | "disconnected"   // WebSocket not connected
@@ -65,9 +66,43 @@ export function useAdsb(): AdsbState {
   const mountedRef = useRef(true);
   const backoffRef = useRef(RECONNECT_BASE_MS);
 
+  const nativePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const connect = useCallback(() => {
-    // On native iOS, skip WebSocket — future Capacitor plugin
-    if (isNative()) return;
+    // On native iOS, use Capacitor GDL90 plugin for direct UDP
+    if (isNative()) {
+      GDL90.startListening({ port: 4000 }).then(({ started }) => {
+        if (!mountedRef.current) return;
+        if (started) {
+          setState((prev) => ({ ...prev, status: "connected", wsUrl: "native://gdl90", lastError: null }));
+        }
+      }).catch((err: any) => {
+        if (!mountedRef.current) return;
+        setState((prev) => ({ ...prev, lastError: `Native GDL90: ${err?.message ?? err}` }));
+      });
+
+      // Poll getSnapshot at 1Hz
+      nativePollRef.current = setInterval(async () => {
+        if (!mountedRef.current) return;
+        try {
+          const snapshot = await GDL90.getSnapshot();
+          setState({
+            aircraft: snapshot.aircraft ?? [],
+            ownship: snapshot.ownship ?? null,
+            status: snapshot.receiverConnected ? "receiving" : "connected",
+            receiverConnected: snapshot.receiverConnected,
+            gpsValid: snapshot.gpsValid,
+            count: snapshot.count,
+            lastUpdate: snapshot.timestamp,
+            wsUrl: "native://gdl90",
+            lastError: null,
+          });
+        } catch {
+          // ignore transient errors
+        }
+      }, 1000);
+      return;
+    }
 
     // Clean up any existing connection
     if (wsRef.current) {
@@ -160,6 +195,11 @@ export function useAdsb(): AdsbState {
       mountedRef.current = false;
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", onFocus);
+      if (nativePollRef.current) {
+        clearInterval(nativePollRef.current);
+        nativePollRef.current = null;
+        GDL90.stopListening().catch(() => {});
+      }
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;

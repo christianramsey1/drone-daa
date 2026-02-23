@@ -614,15 +614,24 @@ export default function MapKitMap({
     // Add new
     tileOverlays.forEach((t) => {
       if (tileOverlayMapRef.current.has(t.id)) return;
-      const overlay = new mk.TileOverlay(
-        (x: number, y: number, z: number, _scale: number, _data: any) =>
-          t.urlTemplate.replace("{x}", String(x)).replace("{y}", String(y)).replace("{z}", String(z)),
-      );
-      overlay.opacity = t.opacity ?? 0.7;
-      overlay.minimumZ = 5;
-      overlay.maximumZ = 12;
-      map.addOverlay(overlay);
-      tileOverlayMapRef.current.set(t.id, overlay);
+      try {
+        const overlay = new mk.TileOverlay(
+          (x: number, y: number, z: number, _scale: number, _data: any) => {
+            try {
+              return t.urlTemplate.replace("{x}", String(x)).replace("{y}", String(y)).replace("{z}", String(z));
+            } catch {
+              return "";
+            }
+          },
+        );
+        overlay.opacity = t.opacity ?? 0.7;
+        overlay.minimumZ = 5;
+        overlay.maximumZ = 11;
+        map.addOverlay(overlay);
+        tileOverlayMapRef.current.set(t.id, overlay);
+      } catch (err) {
+        console.warn("[MapKit] Failed to add tile overlay:", t.id, err);
+      }
     });
   }, [tileOverlays, status]);
 

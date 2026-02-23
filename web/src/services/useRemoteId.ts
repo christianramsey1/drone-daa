@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { isNative } from "../platform";
 import type { DroneTrack, RidSnapshot } from "./remoteId";
 import { ODID_BLE_SERVICE_UUID } from "./remoteId";
+import { RemoteIdNative } from "./RemoteIdPlugin";
 
 export type RidConnectionStatus =
   | "unavailable"  // Web Bluetooth not supported
@@ -43,6 +44,7 @@ export function useRemoteId(): RidState & {
   const backoffRef = useRef(WS_RECONNECT_BASE_MS);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const nativePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Sync dronesRef → state
   const syncState = useCallback(() => {
@@ -115,13 +117,35 @@ export function useRemoteId(): RidState & {
     scanningRef.current = true;
 
     if (isNative()) {
-      // Future: Capacitor plugin for CoreBluetooth RID scanning
-      setState((prev) => ({
-        ...prev,
-        status: "scanning",
-        error: "Native RID scanning coming soon. Using relay.",
-      }));
-      connectRelay();
+      // Use Capacitor CoreBluetooth plugin for native RID scanning
+      try {
+        const { started } = await RemoteIdNative.startScanning();
+        if (started) {
+          setState((prev) => ({ ...prev, status: "scanning", error: null }));
+
+          // Poll getSnapshot at 1Hz
+          const pollInterval = setInterval(async () => {
+            if (!mountedRef.current) return;
+            try {
+              const snapshot = await RemoteIdNative.getSnapshot();
+              dronesRef.current.clear();
+              for (const d of snapshot.drones) {
+                dronesRef.current.set(d.id, d);
+              }
+              syncState();
+            } catch { /* ignore transient */ }
+          }, 1000);
+
+          // Store for cleanup
+          nativePollRef.current = pollInterval;
+        }
+      } catch (err: any) {
+        setState((prev) => ({
+          ...prev,
+          error: `Native RID: ${err?.message ?? err}. Using relay.`,
+        }));
+        connectRelay();
+      }
       return;
     }
 
@@ -174,6 +198,11 @@ export function useRemoteId(): RidState & {
   // Stop scanning
   const stopScan = useCallback(() => {
     scanningRef.current = false;
+    if (nativePollRef.current) {
+      clearInterval(nativePollRef.current);
+      nativePollRef.current = null;
+      RemoteIdNative.stopScanning().catch(() => {});
+    }
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -208,6 +237,11 @@ export function useRemoteId(): RidState & {
     startScan();
     return () => {
       mountedRef.current = false;
+      if (nativePollRef.current) {
+        clearInterval(nativePollRef.current);
+        nativePollRef.current = null;
+        RemoteIdNative.stopScanning().catch(() => {});
+      }
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
