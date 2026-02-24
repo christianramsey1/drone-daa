@@ -2,7 +2,7 @@
 import "./App.css";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MapKitMap, { type Annotation, type Polyline } from "./MapKitMap";
-import { getApiBaseUrl } from "./platform";
+import { getApiBaseUrl, isNative } from "./platform";
 import { useAdsb, type AdsbConnectionStatus } from "./services/useAdsb";
 import type { AircraftTrack } from "./services/adsb";
 import { distanceNm, destinationPoint } from "./nav";
@@ -374,22 +374,30 @@ function nextHourSummaryText(nextHour: NextHourData | null | undefined): string 
 
 // ── Sub-components ─────────────────────────────────────────────────────
 
-function AdsbStatusBadge({ status, gpsValid }: {
+function AdsbStatusBadge({ status, gpsValid, native }: {
   status: AdsbConnectionStatus;
   gpsValid: boolean;
+  native?: boolean;
 }) {
   const colors: Record<AdsbConnectionStatus, string> = {
-    disconnected: "#ff453a",
+    disconnected: native ? "#ffd60a" : "#ff453a",
     connecting: "#ffd60a",
     connected: "#ffd60a",
     receiving: "#30d158",
   };
-  const labels: Record<AdsbConnectionStatus, string> = {
-    disconnected: "Relay not running",
-    connecting: "Connecting to relay...",
-    connected: "Relay running — no ADS-B receiver",
-    receiving: "Receiving ADS-B data",
-  };
+  const labels: Record<AdsbConnectionStatus, string> = native
+    ? {
+        disconnected: "Starting GDL-90 listener\u2026",
+        connecting: "Initializing\u2026",
+        connected: "Listening \u2014 no ADS-B data yet",
+        receiving: "Receiving ADS-B data",
+      }
+    : {
+        disconnected: "Relay not running",
+        connecting: "Connecting to relay\u2026",
+        connected: "Relay running \u2014 no ADS-B receiver",
+        receiving: "Receiving ADS-B data",
+      };
 
   return (
     <div className="kv" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -2253,7 +2261,7 @@ export default function App() {
                 </div>
 
                 {/* Connection status */}
-                <AdsbStatusBadge status={adsb.status} gpsValid={adsb.gpsValid} />
+                <AdsbStatusBadge status={adsb.status} gpsValid={adsb.gpsValid} native={isNative()} />
 
                 {/* Traffic — sorted by distance */}
                 {sortedAircraft.length > 0 && (
@@ -2272,7 +2280,20 @@ export default function App() {
                   </div>
                 )}
 
-                {adsb.status !== "receiving" && !wizardDismissed && (
+                {adsb.status !== "receiving" && isNative() && (
+                  <div className="kv" style={{ padding: 8, background: "rgba(255,255,255,0.05)", borderRadius: 8 }}>
+                    <div style={{ fontWeight: 600, fontSize: 12 }}>Connect Your ADS-B Receiver</div>
+                    <ol className="smallMuted" style={{ margin: "6px 0 0 0", paddingLeft: 18 }}>
+                      <li>Power on your GDL-90 compatible ADS-B receiver.</li>
+                      <li>Connect this device to the receiver's WiFi hotspot.</li>
+                      <li>Aircraft will appear on the map automatically.</li>
+                    </ol>
+                    <p className="smallMuted" style={{ marginTop: 4, fontSize: 10, opacity: 0.6 }}>
+                      The app listens directly on UDP port 4000 for GDL-90 data — no relay app needed on mobile.
+                    </p>
+                  </div>
+                )}
+                {adsb.status !== "receiving" && !isNative() && !wizardDismissed && (
                   <ConnectionWizard
                     adsbStatus={adsb.status}
                     adsbReceiverConnected={adsb.receiverConnected}
@@ -2281,7 +2302,7 @@ export default function App() {
                     onOpenHowTo={() => setPanelTab("howto")}
                   />
                 )}
-                {adsb.status !== "receiving" && wizardDismissed && (
+                {adsb.status !== "receiving" && !isNative() && wizardDismissed && (
                   <div style={{ marginTop: 8 }}>
                     <p className="smallMuted">
                       {adsb.status === "disconnected"
@@ -2329,33 +2350,39 @@ export default function App() {
 
             {panelTab === "settings" && (
               <div className="panelSection">
-                {/* Relay Connection */}
-                <div className="sectionTitle">Relay</div>
+                {/* ADS-B Connection */}
+                <div className="sectionTitle">{isNative() ? "ADS-B Receiver" : "Relay"}</div>
                 <div className="row">
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
                     <div style={{
                       width: 8, height: 8, borderRadius: 4,
                       backgroundColor: adsb.status === "receiving" ? "#30d158"
                         : adsb.status === "connected" ? "#ffd60a"
-                        : "#ff453a",
+                        : isNative() ? "#ffd60a" : "#ff453a",
                       flexShrink: 0,
                     }} />
                     <span className="rowTitle">
-                      {adsb.status === "receiving" ? "Receiving ADS-B data"
-                        : adsb.status === "connected" ? "Relay running — no receiver"
-                        : "Relay not running"}
+                      {isNative()
+                        ? (adsb.status === "receiving" ? "Receiving ADS-B data"
+                          : adsb.status === "connected" ? "Listening \u2014 no ADS-B data"
+                          : "Starting GDL-90 listener\u2026")
+                        : (adsb.status === "receiving" ? "Receiving ADS-B data"
+                          : adsb.status === "connected" ? "Relay running \u2014 no receiver"
+                          : "Relay not running")}
                     </span>
                   </div>
-                  <button
-                    className="chipBtn compact"
-                    onClick={() => { setWizardDismissed(false); setPanelTab("adsb"); }}
-                  >
-                    Setup
-                  </button>
+                  {!isNative() && (
+                    <button
+                      className="chipBtn compact"
+                      onClick={() => { setWizardDismissed(false); setPanelTab("adsb"); }}
+                    >
+                      Setup
+                    </button>
+                  )}
                 </div>
                 {/* Diagnostic info */}
                 <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 4, fontFamily: "monospace" }}>
-                  WS: {adsb.wsUrl || "n/a"} | State: {adsb.status}
+                  {isNative() ? "GDL-90 UDP :4000" : `WS: ${adsb.wsUrl || "n/a"}`} | State: {adsb.status}
                   {adsb.lastError && <span style={{ color: "#ff453a" }}> | {adsb.lastError}</span>}
                 </div>
 
@@ -2542,45 +2569,62 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>3. Install the Relay App</div>
-                  <p className="smallMuted">
-                    ADS-B and Remote ID data require the DroneDAA Relay app
-                    running on your computer. Download the installer for macOS
-                    or Windows. The relay runs as a small icon in your menu bar
-                    (Mac) or system tray (Windows) — no configuration needed.
-                  </p>
-                  <p className="smallMuted" style={{ marginTop: 4 }}>
-                    <strong>macOS:</strong> After installing, if macOS says the app is
-                    "damaged", open Terminal and run:<br />
-                    <code style={{ fontSize: 11, color: "#00d1ff", background: "rgba(0,209,255,0.08)", padding: "2px 6px", borderRadius: 4, display: "inline-block", marginTop: 4 }}>
-                      xattr -cr /Applications/DroneDAA\ Relay.app
-                    </code><br />
-                    <span style={{ fontSize: 10, opacity: 0.6 }}>
-                      This removes the quarantine flag from unsigned downloads.
-                    </span>
-                  </p>
-                  <button
-                    className="chipBtn"
-                    style={{ marginTop: 8 }}
-                    onClick={() => { setWizardDismissed(false); setPanelTab("adsb"); }}
-                  >
-                    Open Setup Guide
-                  </button>
-                </div>
+                {isNative() ? (
+                  <div className="kv">
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>3. Connect ADS-B Receiver</div>
+                    <p className="smallMuted">
+                      Power on your GDL-90 compatible ADS-B receiver
+                      and connect this device to the receiver's WiFi hotspot.
+                      The app listens directly for GDL-90 data on UDP port 4000 — no relay
+                      app or additional software needed.
+                    </p>
+                    <p className="smallMuted" style={{ marginTop: 4 }}>
+                      Aircraft appear on the map automatically, color-coded by alert level.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="kv">
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>3. Install the Relay App</div>
+                      <p className="smallMuted">
+                        ADS-B and Remote ID data require the DroneDAA Relay app
+                        running on your computer. Download the installer for macOS
+                        or Windows. The relay runs as a small icon in your menu bar
+                        (Mac) or system tray (Windows) — no configuration needed.
+                      </p>
+                      <p className="smallMuted" style={{ marginTop: 4 }}>
+                        <strong>macOS:</strong> After installing, if macOS says the app is
+                        "damaged", open Terminal and run:<br />
+                        <code style={{ fontSize: 11, color: "#00d1ff", background: "rgba(0,209,255,0.08)", padding: "2px 6px", borderRadius: 4, display: "inline-block", marginTop: 4 }}>
+                          xattr -cr /Applications/DroneDAA\ Relay.app
+                        </code><br />
+                        <span style={{ fontSize: 10, opacity: 0.6 }}>
+                          This removes the quarantine flag from unsigned downloads.
+                        </span>
+                      </p>
+                      <button
+                        className="chipBtn"
+                        style={{ marginTop: 8 }}
+                        onClick={() => { setWizardDismissed(false); setPanelTab("adsb"); }}
+                      >
+                        Open Setup Guide
+                      </button>
+                    </div>
+
+                    <div className="kv">
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>4. Connect ADS-B Receiver</div>
+                      <p className="smallMuted">
+                        Power on your GDL-90 receiver and connect this device to the
+                        receiver's WiFi hotspot. The relay listens on UDP port 4000
+                        for GDL-90 data and forwards it to the web app. Aircraft
+                        appear on the map color-coded by alert level.
+                      </p>
+                    </div>
+                  </>
+                )}
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>4. Connect ADS-B Receiver</div>
-                  <p className="smallMuted">
-                    Power on your GDL-90 receiver and connect this device to the
-                    receiver's WiFi hotspot. The relay listens on UDP port 4000
-                    for GDL-90 data and forwards it to the web app. Aircraft
-                    appear on the map color-coded by alert level.
-                  </p>
-                </div>
-
-                <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>5. Configure Alert Volumes</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{isNative() ? "4" : "5"}. Configure Alert Volumes</div>
                   <p className="smallMuted">
                     Go to the <strong>Alerts</strong> tab and configure caution (yellow) and warning (red)
                     rings around your position. Set the range in nautical miles and altitude
@@ -2590,7 +2634,7 @@ export default function App() {
                 </div>
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>6. FAA Airspace</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{isNative() ? "5" : "6"}. FAA Airspace</div>
                   <p className="smallMuted">
                     On the <strong>Maps</strong> tab, toggle FAA airspace classes (B/C/D/E), TFRs, restricted areas,
                     security zones, and LAANC grid overlays. Data is fetched live
@@ -2601,18 +2645,18 @@ export default function App() {
                 </div>
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>7. Remote ID</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{isNative() ? "6" : "7"}. Remote ID</div>
                   <p className="smallMuted">
                     Detects nearby drones broadcasting Remote ID per ASTM F3586-22.
-                    Supports all broadcast types: Bluetooth 5 (Long Range and Legacy),
-                    WiFi Beacon, and WiFi NAN. The relay scans BLE directly when
-                    Bluetooth hardware is available, and also accepts WiFi RID data
-                    from external scanners via its HTTP ingest API.
+                    Supports Bluetooth 5 (Long Range and Legacy).
+                    {isNative()
+                      ? " Your device scans for Remote ID broadcasts directly via Bluetooth — no additional hardware or software needed."
+                      : " The relay scans BLE directly when Bluetooth hardware is available, and also accepts WiFi RID data from external scanners via its HTTP ingest API."}
                   </p>
                 </div>
 
                 <div className="kv">
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>8. Weather</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{isNative() ? "7" : "8"}. Weather</div>
                   <p className="smallMuted">
                     View current conditions, wind speed and direction, visibility,
                     cloud cover, and a 12-hour hourly forecast. The next-hour

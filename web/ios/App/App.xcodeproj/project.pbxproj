@@ -21,6 +21,10 @@
 		E1A0B0012D5F000000000006 /* AppleSignInPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A0B0012D5F000000000007 /* AppleSignInPlugin.swift */; };
 		E1A0B0012D5F000000000008 /* AppleSignInPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = E1A0B0012D5F000000000009 /* AppleSignInPlugin.m */; };
 		E1A0B0012D5F00000000000A /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A0B0012D5F00000000000B /* ViewController.swift */; };
+		E1A0B0012D5F000000000010 /* GDL90Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A0B0012D5F000000000011 /* GDL90Plugin.swift */; };
+		E1A0B0012D5F000000000012 /* GDL90Plugin.m in Sources */ = {isa = PBXBuildFile; fileRef = E1A0B0012D5F000000000013 /* GDL90Plugin.m */; };
+		E1A0B0012D5F000000000014 /* RemoteIdPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A0B0012D5F000000000015 /* RemoteIdPlugin.swift */; };
+		E1A0B0012D5F000000000016 /* RemoteIdPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = E1A0B0012D5F000000000017 /* RemoteIdPlugin.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +46,10 @@
 		E1A0B0012D5F000000000009 /* AppleSignInPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppleSignInPlugin.m; sourceTree = "<group>"; };
 		E1A0B0012D5F00000000000B /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		E1A0B0012D5F00000000000C /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		E1A0B0012D5F000000000011 /* GDL90Plugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GDL90Plugin.swift; sourceTree = "<group>"; };
+		E1A0B0012D5F000000000013 /* GDL90Plugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GDL90Plugin.m; sourceTree = "<group>"; };
+		E1A0B0012D5F000000000015 /* RemoteIdPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteIdPlugin.swift; sourceTree = "<group>"; };
+		E1A0B0012D5F000000000017 /* RemoteIdPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RemoteIdPlugin.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,6 +117,10 @@
 				E1A0B0012D5F000000000009 /* AppleSignInPlugin.m */,
 				E1A0B0012D5F000000000002 /* StoreKitPlugin.swift */,
 				E1A0B0012D5F000000000004 /* StoreKitPlugin.m */,
+				E1A0B0012D5F000000000011 /* GDL90Plugin.swift */,
+				E1A0B0012D5F000000000013 /* GDL90Plugin.m */,
+				E1A0B0012D5F000000000015 /* RemoteIdPlugin.swift */,
+				E1A0B0012D5F000000000017 /* RemoteIdPlugin.m */,
 			);
 			path = Plugins;
 			sourceTree = "<group>";
@@ -199,6 +211,10 @@
 				E1A0B0012D5F000000000003 /* StoreKitPlugin.m in Sources */,
 				E1A0B0012D5F000000000006 /* AppleSignInPlugin.swift in Sources */,
 				E1A0B0012D5F000000000008 /* AppleSignInPlugin.m in Sources */,
+				E1A0B0012D5F000000000010 /* GDL90Plugin.swift in Sources */,
+				E1A0B0012D5F000000000012 /* GDL90Plugin.m in Sources */,
+				E1A0B0012D5F000000000014 /* RemoteIdPlugin.swift in Sources */,
+				E1A0B0012D5F000000000016 /* RemoteIdPlugin.m in Sources */,
 				E1A0B0012D5F00000000000A /* ViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

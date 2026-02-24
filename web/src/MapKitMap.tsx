@@ -607,28 +607,28 @@ export default function MapKitMap({
       if (!currentIds.has(id)) toRemove.push(id);
     });
     toRemove.forEach((id) => {
-      map.removeOverlay(tileOverlayMapRef.current.get(id));
+      map.removeTileOverlay(tileOverlayMapRef.current.get(id));
       tileOverlayMapRef.current.delete(id);
     });
 
-    // Add new
+    // Add new — tile overlays use addTileOverlay(), not addOverlay()
     tileOverlays.forEach((t) => {
       if (tileOverlayMapRef.current.has(t.id)) return;
       try {
         const overlay = new mk.TileOverlay(
           (x: number, y: number, z: number, _scale: number, _data: any) => {
-            try {
-              return t.urlTemplate.replace("{x}", String(x)).replace("{y}", String(y)).replace("{z}", String(z));
-            } catch {
-              return "";
-            }
+            return t.urlTemplate
+              .replace("{x}", String(x))
+              .replace("{y}", String(y))
+              .replace("{z}", String(z));
           },
         );
         overlay.opacity = t.opacity ?? 0.7;
         overlay.minimumZ = 5;
         overlay.maximumZ = 11;
-        map.addOverlay(overlay);
+        map.addTileOverlay(overlay);
         tileOverlayMapRef.current.set(t.id, overlay);
+        console.log("[MapKit] Added tile overlay:", t.id);
       } catch (err) {
         console.warn("[MapKit] Failed to add tile overlay:", t.id, err);
       }

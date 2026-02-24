@@ -1,5 +1,11 @@
 /* web/src/App.css */
 
+html, body {
+  background: #000;
+  margin: 0;
+  padding: 0;
+}
+
 :root {
   --panel-w: 340px;
   --panel-bg: rgba(18, 18, 20, 0.92);
@@ -496,6 +502,10 @@ select option {
 .hudPills {
   /* App.tsx sets inline positioning; add safe area for iOS home indicator */
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  /* Prevent pills from exceeding screen width */
+  max-width: calc(100vw - 20px);
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .pill {

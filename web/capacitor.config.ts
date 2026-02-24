@@ -17,13 +17,13 @@ const config: CapacitorConfig = {
   },
   ios: {
     // Use WKWebView (default, required for App Store)
-    contentInset: "automatic",
+    contentInset: "always",
     // Allow scrolling behavior
     scrollEnabled: true,
     // Prefer native keyboard over web keyboard
     preferredContentMode: "mobile",
-    // Background modes if needed later
-    // backgroundColor: "#000000",
+    // Black background behind the web view (matches app theme)
+    backgroundColor: "#000000",
   },
   plugins: {
     CapacitorHttp: {
