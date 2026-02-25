@@ -61,6 +61,11 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
             let params = NWParameters.udp
             params.allowLocalEndpointReuse = true
 
+            // Constrain to WiFi interface — GDL-90 receivers (SkyEcho, Stratux, etc.)
+            // create a local WiFi AP with no internet. Without this, iOS may route
+            // traffic through cellular and miss the UDP broadcasts.
+            params.requiredInterfaceType = .wifi
+
             let nwPort = NWEndpoint.Port(integerLiteral: UInt16(port))
             listener = try NWListener(using: params, on: nwPort)
 
@@ -74,7 +79,7 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
             listener?.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
-                    print("[GDL90] UDP listener ready on port \(port)")
+                    print("[GDL90] UDP listener ready on port \(port) (WiFi only)")
                 case .failed(let error):
                     print("[GDL90] Listener failed: \(error)")
                     self?.stopListenerInternal()
@@ -121,6 +126,15 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
 
             if let error = error {
                 print("[GDL90] Receive error: \(error)")
+                // Remove dead connection
+                self.queue.async {
+                    self.connections.removeAll { $0 === connection }
+                }
+                return
+            }
+
+            // If connection was cancelled, stop the loop
+            if connection.state == .cancelled {
                 return
             }
 

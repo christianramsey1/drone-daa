@@ -13,6 +13,7 @@ import { useRemoteId, type RidConnectionStatus } from "./services/useRemoteId";
 import type { DroneTrack } from "./services/remoteId";
 import { broadcastTypeLabel } from "./services/remoteId";
 import { ConnectionWizard } from "./ConnectionWizard";
+import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
 const LeafletMap = lazy(() => import("./LeafletMap"));
 
@@ -181,34 +182,63 @@ function playAlertTone(level: AlertLevel) {
   try {
     const ctx = getAudioCtx();
     if (ctx.state === "suspended") ctx.resume();
-    const beeps = level === "warning" ? 3 : 2;
-    const freq = level === "warning" ? 1200 : 880;
-    const gap = level === "warning" ? 0.18 : 0.25;
-    const dur = level === "warning" ? 0.12 : 0.15;
-    const vol = level === "warning" ? 0.5 : 0.4;
 
-    for (let i = 0; i < beeps; i++) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "square";
-      osc.frequency.value = freq;
-      const t = ctx.currentTime + i * gap;
-      osc.start(t);
-      gain.gain.setValueAtTime(vol, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + dur);
-      osc.stop(t + dur);
+    if (level === "warning") {
+      // WARNING: 5 loud urgent beeps — alternating high/low like TCAS RA
+      const beeps = 5;
+      const dur = 0.18;
+      const gap = 0.25;
+      for (let i = 0; i < beeps; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "square";
+        osc.frequency.value = i % 2 === 0 ? 1400 : 1000;
+        const t = ctx.currentTime + i * gap;
+        osc.start(t);
+        gain.gain.setValueAtTime(1.0, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + dur);
+        osc.stop(t + dur);
+      }
+    } else {
+      // CAUTION: 3 firm beeps
+      const beeps = 3;
+      const freq = 950;
+      const gap = 0.28;
+      const dur = 0.18;
+      for (let i = 0; i < beeps; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "square";
+        osc.frequency.value = freq;
+        const t = ctx.currentTime + i * gap;
+        osc.start(t);
+        gain.gain.setValueAtTime(0.8, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + dur);
+        osc.stop(t + dur);
+      }
     }
   } catch { /* audio not available */ }
 }
 
 function hapticPulse(level: AlertLevel) {
   try {
-    if (navigator.vibrate) {
-      navigator.vibrate(level === "warning" ? [300, 100, 300, 100, 300] : [200, 100, 200]);
+    if (isNative()) {
+      // Obnoxious sustained buzz — as fast as the haptic engine can cycle
+      // Warning: ~2s continuous buzzing. Caution: ~1s.
+      const count = level === "warning" ? 60 : 30;
+      for (let i = 0; i < count; i++) {
+        setTimeout(() => Haptics.impact({ style: ImpactStyle.Heavy }), i * 30);
+      }
+    } else if (navigator.vibrate) {
+      navigator.vibrate(level === "warning"
+        ? [800, 100, 800, 100, 800]
+        : [500, 100, 500, 100, 500]);
     }
-  } catch { /* vibration not available */ }
+  } catch { /* haptics/vibration not available */ }
 }
 
 function circlePolyPoints(
@@ -1764,7 +1794,7 @@ export default function App() {
                               borderRadius: 6,
                               color: "white",
                               padding: "4px 8px",
-                              fontSize: 11,
+                              fontSize: 16,
                               outline: "none",
                               boxSizing: "border-box",
                             }}
@@ -2043,7 +2073,7 @@ export default function App() {
                             borderRadius: 6,
                             color: "white",
                             padding: "4px 8px",
-                            fontSize: 11,
+                            fontSize: 16,
                             outline: "none",
                             boxSizing: "border-box" as const,
                           }}
