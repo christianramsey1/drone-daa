@@ -23,6 +23,7 @@ node_modules/
 api/mapkit/keys/*.p8
 api/auth/keys/*.p8
 *.p8
+*.p12
 api/mapkit/keys/
 api/auth/keys/
 

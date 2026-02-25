@@ -22,6 +22,10 @@ files:
 
 npmRebuild: true
 
+# Notarization hook — runs after code signing on macOS.
+# Skips gracefully when APPLE_API_KEY_PATH env var is not set (local builds).
+afterSign: scripts/notarize.js
+
 mac:
   target:
     - dmg
