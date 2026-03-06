@@ -34,6 +34,11 @@ export default defineConfig(() => {
           target: "ws://localhost:4002",
           ws: true,
         },
+        "/skyalert": {
+          target: "http://192.168.4.1",
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/skyalert/, ""),
+        },
       },
     },
   };

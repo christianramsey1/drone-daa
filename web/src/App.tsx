@@ -14,6 +14,7 @@ import type { DroneTrack } from "./services/remoteId";
 import { broadcastTypeLabel } from "./services/remoteId";
 import { ConnectionWizard } from "./ConnectionWizard";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
+import { useSkyAlert, type SkyAlertSettings } from "./services/useSkyAlert";
 
 const LeafletMap = lazy(() => import("./LeafletMap"));
 
@@ -700,6 +701,13 @@ export default function App() {
 
   // ADS-B
   const adsb = useAdsb();
+  const skyAlert = useSkyAlert(adsb.status === "connected" || adsb.status === "receiving");
+  const [skyEdits, setSkyEdits] = useState<Partial<SkyAlertSettings> | null>(null);
+  // Merge device settings with local edits
+  const skyValues: SkyAlertSettings | null = skyAlert.settings && skyEdits
+    ? { ...skyAlert.settings, wifi: { ...skyAlert.settings.wifi, ...skyEdits.wifi }, led: { ...skyAlert.settings.led, ...skyEdits.led }, trafficProximityAlert: { ...skyAlert.settings.trafficProximityAlert, ...skyEdits.trafficProximityAlert }, ownshipFilter: { ...skyAlert.settings.ownshipFilter, ...skyEdits.ownshipFilter }, Power: { ...skyAlert.settings.Power, ...skyEdits.Power } }
+    : skyAlert.settings;
+  const skyDirty = skyEdits !== null;
 
   // Map bbox for FAA layer fetching (common across both map engines)
   const [mapBbox, setMapBbox] = useState<AirspaceBbox | null>(null);
@@ -2415,6 +2423,121 @@ export default function App() {
                   {isNative() ? "GDL-90 UDP :4000" : `WS: ${adsb.wsUrl || "n/a"}`} | State: {adsb.status}
                   {adsb.lastError && <span style={{ color: "#ff453a" }}> | {adsb.lastError}</span>}
                 </div>
+
+                {skyAlert.detected && skyValues && (
+                  <>
+                    <div className="divider" />
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div className="sectionTitle">skyAlert Configuration</div>
+                      {skyAlert.loading && <span className="smallMuted">loading...</span>}
+                    </div>
+
+                    {/* Traffic Proximity Alarm */}
+                    <div className="sectionTitle" style={{ fontSize: 12, marginTop: 4 }}>Traffic Proximity Alarm</div>
+                    <div className="row">
+                      <span className="rowTitle">Altitude Limit (ft)</span>
+                      <input
+                        type="number"
+                        className="settingsInput"
+                        value={skyValues.trafficProximityAlert.altitude_ft}
+                        onChange={(e) => setSkyEdits((prev) => ({ ...prev, trafficProximityAlert: { ...skyValues.trafficProximityAlert, ...prev?.trafficProximityAlert, altitude_ft: Number(e.target.value) } }))}
+                        style={{ width: 80, textAlign: "right" }}
+                      />
+                    </div>
+                    <div className="row">
+                      <span className="rowTitle">Range Limit (ft)</span>
+                      <input
+                        type="number"
+                        className="settingsInput"
+                        value={Math.round(skyValues.trafficProximityAlert.range_m / 0.3048)}
+                        onChange={(e) => setSkyEdits((prev) => ({ ...prev, trafficProximityAlert: { ...skyValues.trafficProximityAlert, ...prev?.trafficProximityAlert, range_m: Number(e.target.value) * 0.3048 } }))}
+                        style={{ width: 80, textAlign: "right" }}
+                      />
+                    </div>
+                    <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span className="rowTitle">Volume</span>
+                        <span className="smallMuted">{skyValues.trafficProximityAlert.volume}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0} max={100} step={1}
+                        className="settingsRange"
+                        value={skyValues.trafficProximityAlert.volume}
+                        onChange={(e) => setSkyEdits((prev) => ({ ...prev, trafficProximityAlert: { ...skyValues.trafficProximityAlert, ...prev?.trafficProximityAlert, volume: Number(e.target.value) } }))}
+                      />
+                    </div>
+                    <div className="row">
+                      <span className="rowTitle">Ownship ICAO (0x)</span>
+                      <input
+                        type="text"
+                        className="settingsInput"
+                        value={skyValues.ownshipFilter.icaoAddress ?? ""}
+                        onChange={(e) => setSkyEdits((prev) => ({ ...prev, ownshipFilter: { ...skyValues.ownshipFilter, ...prev?.ownshipFilter, icaoAddress: e.target.value || null } }))}
+                        style={{ width: 80, textAlign: "right", fontFamily: "monospace" }}
+                        maxLength={6}
+                        placeholder="000000"
+                      />
+                    </div>
+
+                    {/* LED Control */}
+                    <div className="sectionTitle" style={{ fontSize: 12, marginTop: 8 }}>LED Control</div>
+                    <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span className="rowTitle">Brightness</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span className="smallMuted">{skyValues.led.brightness}</span>
+                          <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
+                            <input
+                              type="checkbox"
+                              checked={skyValues.led.auto}
+                              onChange={(e) => setSkyEdits((prev) => ({ ...prev, led: { ...skyValues.led, ...prev?.led, auto: e.target.checked } }))}
+                              style={{ accentColor: "#0a84ff" }}
+                            />
+                            Auto
+                          </label>
+                        </div>
+                      </div>
+                      <input
+                        type="range"
+                        min={0} max={100} step={1}
+                        className="settingsRange"
+                        value={skyValues.led.brightness}
+                        onChange={(e) => setSkyEdits((prev) => ({ ...prev, led: { ...skyValues.led, ...prev?.led, brightness: Number(e.target.value) } }))}
+                      />
+                    </div>
+
+                    {/* Save + Actions */}
+                    <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                      <button
+                        className={`chipBtn${skyDirty ? " active" : ""}`}
+                        disabled={!skyDirty || skyAlert.saving}
+                        onClick={async () => {
+                          if (!skyValues) return;
+                          const ok = await skyAlert.save(skyValues);
+                          if (ok) setSkyEdits(null);
+                        }}
+                      >
+                        {skyAlert.saving ? "Saving..." : "Save"}
+                      </button>
+                      <button className="chipBtn compact" onClick={() => skyAlert.action("reset")}>
+                        Reset
+                      </button>
+                      <button className="chipBtn compact" onClick={() => skyAlert.action("testAlarm")}>
+                        Test Alarm
+                      </button>
+                      <button className="chipBtn compact" onClick={() => skyAlert.action("silenceAlarm")}>
+                        Silence
+                      </button>
+                      <button className="chipBtn compact" onClick={() => skyAlert.action("testLeds")}>
+                        Test LEDs
+                      </button>
+                    </div>
+                    {skyAlert.error && (
+                      <p className="errText" style={{ marginTop: 4 }}>{skyAlert.error}</p>
+                    )}
+                  </>
+                )}
 
                 <div className="divider" />
 

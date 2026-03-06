@@ -492,6 +492,24 @@ select option {
   cursor: pointer;
 }
 
+/* Inline inputs for device settings */
+.settingsInput {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  padding: 4px 8px;
+  outline: none;
+}
+.settingsInput:focus {
+  border-color: rgba(0, 209, 255, 0.6);
+}
+.settingsInput option {
+  background: #1c1c1e;
+  color: #fff;
+}
+
 .errText {
   color: #ff453a;
   font-size: 12px;
