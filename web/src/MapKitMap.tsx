@@ -295,10 +295,6 @@ export default function MapKitMap({
     toRemove.forEach((id) => annotationsMapRef.current.delete(id));
 
     // Add or update annotations
-    const selectedAnns = annotations.filter((a) => a.selected);
-    if (selectedAnns.length > 0) {
-      console.log("[MapKit] selected annotations:", selectedAnns.map((a) => `${a.id} sel=${a.selected}`));
-    }
     annotations.forEach((a) => {
       let annotation = annotationsMapRef.current.get(a.id);
 

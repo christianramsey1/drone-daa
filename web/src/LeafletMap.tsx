@@ -177,13 +177,14 @@ export default function LeafletMap({
     annotations.forEach((a) => {
       let marker = markersRef.current.get(a.id);
 
-      // Aircraft/Drone: check if needs recreation (heading/size/alert changed)
+      // Aircraft/Drone: check if needs recreation (heading/size/alert/selected changed)
       if (marker && (a.style === "aircraft" || a.style === "drone")) {
         const heading = a.heading ?? 0;
         const iconSz = a.iconSize ?? 32;
         const tagLines = a.dataTagLines ?? [];
         const level = a.alertLevel ?? "normal";
-        const newKey = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${tagLines.join("|")}`;
+        const sel = a.selected ? "1" : "0";
+        const newKey = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${sel}_${tagLines.join("|")}`;
         const prevKey = (marker as any)._daaKey;
         if (prevKey !== newKey) {
           map.removeLayer(marker);
@@ -200,19 +201,23 @@ export default function LeafletMap({
           const iconSz = a.iconSize ?? 32;
           const tagLines = a.dataTagLines ?? [];
           const level = a.alertLevel ?? "normal";
-          // Convert canvas to data URL so it survives HTML serialization
+          const sel = a.selected;
           const canvas = createAircraftIcon(heading, level, iconSz);
           const imgUrl = canvas.toDataURL();
+          const glowStyle = sel ? "filter:drop-shadow(0 0 8px #00aaff) drop-shadow(0 0 16px #00aaff) drop-shadow(0 0 24px #00aaff);" : "";
           let tagHtml = "";
           if (tagLines.length > 0) {
             const tagContent = tagLines.map((l) => `<div>${l}</div>`).join("");
+            const tagBg = sel
+              ? "background:rgba(0,100,255,0.4);padding:2px 5px;border-radius:3px;border:1.5px solid #00aaff;"
+              : "";
             tagHtml = `<div style="position:absolute;left:${iconSz + 4}px;top:0;` +
               "font-family:system-ui,-apple-system,sans-serif;font-size:10px;line-height:1.3;" +
               "color:rgba(255,255,255,0.92);text-shadow:0 1px 3px rgba(0,0,0,0.8),0 0 6px rgba(0,0,0,0.6);" +
-              `white-space:nowrap;pointer-events:none;">${tagContent}</div>`;
+              `white-space:nowrap;pointer-events:none;${tagBg}">${tagContent}</div>`;
           }
           icon = L.divIcon({
-            html: `<div style="width:${iconSz}px;height:${iconSz}px;position:relative;overflow:visible;">` +
+            html: `<div style="width:${iconSz}px;height:${iconSz}px;position:relative;overflow:visible;${glowStyle}">` +
               `<img src="${imgUrl}" width="${iconSz}" height="${iconSz}" style="display:block;" />` +
               tagHtml + `</div>`,
             className: "",
@@ -220,7 +225,7 @@ export default function LeafletMap({
             iconAnchor: [iconSz / 2, iconSz / 2],
           });
           marker = L.marker([a.lat, a.lon], { icon, interactive: !!onSelect }).addTo(map);
-          const key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${tagLines.join("|")}`;
+          const key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${sel ? "1" : "0"}_${tagLines.join("|")}`;
           (marker as any)._daaKey = key;
         } else if (a.style === "gps-position") {
           const canvas = createGpsPositionIcon(a.color ?? "#007aff");
@@ -246,18 +251,23 @@ export default function LeafletMap({
           const iconSz = a.iconSize ?? 28;
           const tagLines = a.dataTagLines ?? [];
           const level = a.alertLevel ?? "normal";
+          const sel = a.selected;
           const canvas = createDroneIcon(heading, level, iconSz);
           const imgUrl = canvas.toDataURL();
+          const glowStyle = sel ? "filter:drop-shadow(0 0 8px #00aaff) drop-shadow(0 0 16px #00aaff) drop-shadow(0 0 24px #00aaff);" : "";
           let tagHtml = "";
           if (tagLines.length > 0) {
             const tagContent = tagLines.map((l) => `<div>${l}</div>`).join("");
+            const tagBg = sel
+              ? "background:rgba(0,100,255,0.4);padding:1px 4px;border-radius:3px;border:1.5px solid #00aaff;"
+              : "";
             tagHtml = `<div style="position:absolute;left:${iconSz + 4}px;top:0;` +
               "font-family:system-ui,-apple-system,sans-serif;font-size:10px;line-height:1.3;" +
               "color:rgba(255,255,255,0.92);text-shadow:0 1px 3px rgba(0,0,0,0.8),0 0 6px rgba(0,0,0,0.6);" +
-              `white-space:nowrap;pointer-events:none;">${tagContent}</div>`;
+              `white-space:nowrap;pointer-events:none;${tagBg}">${tagContent}</div>`;
           }
           icon = L.divIcon({
-            html: `<div style="width:${iconSz}px;height:${iconSz}px;position:relative;overflow:visible;">` +
+            html: `<div style="width:${iconSz}px;height:${iconSz}px;position:relative;overflow:visible;${glowStyle}">` +
               `<img src="${imgUrl}" width="${iconSz}" height="${iconSz}" style="display:block;" />` +
               tagHtml + `</div>`,
             className: "",
@@ -265,7 +275,7 @@ export default function LeafletMap({
             iconAnchor: [iconSz / 2, iconSz / 2],
           });
           marker = L.marker([a.lat, a.lon], { icon, interactive: !!onSelect }).addTo(map);
-          const key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${tagLines.join("|")}`;
+          const key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${sel ? "1" : "0"}_${tagLines.join("|")}`;
           (marker as any)._daaKey = key;
         } else if (a.style === "rid-operator") {
           const canvas = createOperatorIcon(16);
