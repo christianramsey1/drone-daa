@@ -23,6 +23,7 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - State
 
     private var listener: NWListener?
+    private var connection: NWConnection?  // Direct UDP socket for broadcast reception
     private var connections: [NWConnection] = []
     private let queue = DispatchQueue(label: "com.dronedaa.gdl90", qos: .userInitiated)
 
@@ -60,17 +61,16 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
         do {
             let params = NWParameters.udp
             params.allowLocalEndpointReuse = true
-
-            // Constrain to WiFi interface — GDL-90 receivers (SkyEcho, Stratux, etc.)
-            // create a local WiFi AP with no internet. Without this, iOS may route
-            // traffic through cellular and miss the UDP broadcasts.
             params.requiredInterfaceType = .wifi
 
             let nwPort = NWEndpoint.Port(integerLiteral: UInt16(port))
+
+            // Method 1: NWListener — handles directed UDP packets
             listener = try NWListener(using: params, on: nwPort)
 
             listener?.newConnectionHandler = { [weak self] connection in
                 guard let self = self else { return }
+                print("[GDL90] New connection from: \(connection.endpoint)")
                 self.connections.append(connection)
                 self.receiveLoop(connection)
                 connection.start(queue: self.queue)
@@ -89,6 +89,52 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
             }
 
             listener?.start(queue: queue)
+
+            // Method 2: NWConnectionGroup for multicast/broadcast reception
+            // GDL-90 devices often broadcast to 255.255.255.255 or the local subnet.
+            // NWListener may not receive these, so we also join a multicast group.
+            let groupParams = NWParameters.udp
+            groupParams.allowLocalEndpointReuse = true
+            groupParams.requiredInterfaceType = .wifi
+
+            // Create a group descriptor for the local port to receive broadcast UDP
+            if let multicast = try? NWMulticastGroup(for: [
+                .hostPort(host: "224.0.0.1", port: nwPort)
+            ]) {
+                let group = NWConnectionGroup(with: multicast, using: groupParams)
+                group.setReceiveHandler(maximumMessageSize: 4096, rejectOversizedMessages: false) {
+                    [weak self] message, content, isComplete in
+                    guard let self = self, let data = content else { return }
+                    self.queue.async {
+                        self.lastUdpReceived = Date()
+                        self.handleUdpData(data)
+                    }
+                }
+                group.stateUpdateHandler = { state in
+                    print("[GDL90] Multicast group state: \(state)")
+                }
+                group.start(queue: queue)
+            }
+
+            // Method 3: Also try a direct connection to the AP gateway (192.168.4.1)
+            // listening for any UDP on our port
+            let directParams = NWParameters.udp
+            directParams.allowLocalEndpointReuse = true
+            directParams.requiredInterfaceType = .wifi
+            let directConn = NWConnection(
+                host: "192.168.4.1",
+                port: nwPort,
+                using: directParams
+            )
+            directConn.stateUpdateHandler = { [weak self] state in
+                print("[GDL90] Direct connection state: \(state)")
+                if state == .ready {
+                    self?.receiveLoop(directConn)
+                }
+            }
+            directConn.start(queue: queue)
+            self.connection = directConn
+
             startPushTimer()
             call.resolve(["started": true])
         } catch {
@@ -243,6 +289,8 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
     private func stopListenerInternal() {
         pushTimer?.cancel()
         pushTimer = nil
+        connection?.cancel()
+        connection = nil
         for conn in connections {
             conn.cancel()
         }
