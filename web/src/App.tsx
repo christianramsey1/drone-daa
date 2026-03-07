@@ -884,8 +884,12 @@ export default function App() {
       case "deviceGps":
         return gps && isValidCoord(gps.lat, gps.lon) ? { lat: gps.lat, lon: gps.lon } : null;
       case "gdl90Gps":
-        return adsb.ownship && isValidCoord(adsb.ownship.lat, adsb.ownship.lon)
-          ? { lat: adsb.ownship.lat, lon: adsb.ownship.lon } : null;
+        // Try GDL-90 ownship first, fall back to skyAlert HTTP GPS
+        if (adsb.ownship && isValidCoord(adsb.ownship.lat, adsb.ownship.lon))
+          return { lat: adsb.ownship.lat, lon: adsb.ownship.lon };
+        if (skyAlert.gps && isValidCoord(skyAlert.gps.lat, skyAlert.gps.lon))
+          return { lat: skyAlert.gps.lat, lon: skyAlert.gps.lon };
+        return null;
       case "ridDrone": {
         if (!src.ridDroneId) return null;
         const drone = rid.drones.find((d) => d.id === src.ridDroneId);
@@ -911,6 +915,7 @@ export default function App() {
     centerSource.secondary.kind, centerSource.secondary.ridDroneId,
     gps?.lat, gps?.lon,
     adsb.ownship?.lat, adsb.ownship?.lon,
+    skyAlert.gps?.lat, skyAlert.gps?.lon,
     rid.drones,
     tapMapPos?.lat, tapMapPos?.lon,
   ]);
@@ -1759,6 +1764,12 @@ export default function App() {
                     )}
                   </span>
                   <span className="smallMuted">{CENTER_SOURCE_LABELS.tapMap}</span>
+                </div>
+
+                <div className="smallMuted" style={{ marginTop: 4, fontSize: 10, opacity: 0.5 }}>
+                  Device: {gps ? `${gps.lat.toFixed(4)}, ${gps.lon.toFixed(4)}` : "—"}
+                  {" · "}GDL-90: {adsb.ownship ? `${adsb.ownship.lat.toFixed(4)}, ${adsb.ownship.lon.toFixed(4)}` : "—"}
+                  {" · "}skyAlert: {skyAlert.gps ? `${skyAlert.gps.lat.toFixed(4)}, ${skyAlert.gps.lon.toFixed(4)}` : "—"}
                 </div>
 
                 {resolvedCenter && (

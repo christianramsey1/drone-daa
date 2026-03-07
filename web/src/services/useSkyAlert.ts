@@ -44,6 +44,11 @@ export interface SkyAlertOwnshipFilter {
   flarmId: string | null;
 }
 
+export interface SkyAlertGps {
+  lat: number;
+  lon: number;
+}
+
 export interface SkyAlertSettings {
   wifi: SkyAlertWifi;
   led: SkyAlertLed;
@@ -56,6 +61,7 @@ export interface SkyAlertSettings {
 export interface SkyAlertState {
   detected: boolean;
   settings: SkyAlertSettings | null;
+  gps: SkyAlertGps | null;
   loading: boolean;
   saving: boolean;
   error: string | null;
@@ -67,6 +73,7 @@ export interface SkyAlertState {
 const EMPTY: SkyAlertState = {
   detected: false,
   settings: null,
+  gps: null,
   loading: false,
   saving: false,
   error: null,
@@ -78,11 +85,60 @@ const EMPTY: SkyAlertState = {
 export function useSkyAlert(adsbConnected: boolean): SkyAlertState {
   const [detected, setDetected] = useState(false);
   const [settings, setSettings] = useState<SkyAlertSettings | null>(null);
+  const [gps, setGps] = useState<SkyAlertGps | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const probeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
+
+  const fetchGps = useCallback(async () => {
+    // Try JSON status endpoint first, then parse HTML status page
+    const endpoints = [
+      `${base()}/status/?action=get`,
+      `${base()}/?action=get`,
+      `${base()}/status/`,
+      `${base()}/`,
+    ];
+    for (const url of endpoints) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3_000);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (!res.ok) continue;
+        const text = await res.text();
+
+        // Try JSON parse first
+        try {
+          const json = JSON.parse(text);
+          if (json.gps?.lat && json.gps?.lon) {
+            console.log(`[skyAlert] GPS from JSON ${url}:`, json.gps);
+            setGps({ lat: json.gps.lat, lon: json.gps.lon });
+            return;
+          }
+          // Some devices put position at top level
+          if (json.lat && json.lon) {
+            console.log(`[skyAlert] GPS from JSON ${url}: ${json.lat}, ${json.lon}`);
+            setGps({ lat: json.lat, lon: json.lon });
+            return;
+          }
+        } catch { /* not JSON, try HTML */ }
+
+        // Parse HTML for GPS coordinates — look for patterns like "39.121616, -77.7162752"
+        const coordMatch = text.match(/(-?\d{1,3}\.\d{4,})\s*,\s*(-?\d{1,3}\.\d{4,})/);
+        if (coordMatch) {
+          const lat = parseFloat(coordMatch[1]);
+          const lon = parseFloat(coordMatch[2]);
+          if (Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && lat !== 0 && lon !== 0) {
+            console.log(`[skyAlert] GPS from HTML ${url}: ${lat}, ${lon}`);
+            setGps({ lat, lon });
+            return;
+          }
+        }
+      } catch { /* skip */ }
+    }
+  }, []);
 
   const fetchSettings = useCallback(async () => {
     setLoading(true);
@@ -101,6 +157,7 @@ export function useSkyAlert(adsbConnected: boolean): SkyAlertState {
       if (!mountedRef.current) return;
       setDetected(false);
       setSettings(null);
+      setGps(null);
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -111,10 +168,12 @@ export function useSkyAlert(adsbConnected: boolean): SkyAlertState {
     if (!adsbConnected) {
       setDetected(false);
       setSettings(null);
+      setGps(null);
       return;
     }
     fetchSettings();
-    probeTimer.current = setInterval(fetchSettings, PROBE_INTERVAL_MS);
+    fetchGps();
+    probeTimer.current = setInterval(() => { fetchSettings(); fetchGps(); }, PROBE_INTERVAL_MS);
     return () => {
       mountedRef.current = false;
       if (probeTimer.current) clearInterval(probeTimer.current);
@@ -175,5 +234,5 @@ export function useSkyAlert(adsbConnected: boolean): SkyAlertState {
   }, []);
 
   if (!adsbConnected) return EMPTY;
-  return { detected, settings, loading, saving, error, reload: fetchSettings, save, action };
+  return { detected, settings, gps, loading, saving, error, reload: fetchSettings, save, action };
 }

@@ -61,6 +61,7 @@ udp.on("message", (msg) => {
         own.timestamp = Date.now();
         if (own.lat !== 0 && own.lon !== 0) {
           ownship = own;
+          console.log(`[GDL90] Ownship: ${own.lat.toFixed(6)}, ${own.lon.toFixed(6)} alt=${own.altFt}ft`);
         } else if (ownship) {
           // No GPS fix — keep existing ownship alive but mark as stale-position
           ownship.lastSeen = Date.now();
