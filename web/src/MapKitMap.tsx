@@ -295,6 +295,10 @@ export default function MapKitMap({
     toRemove.forEach((id) => annotationsMapRef.current.delete(id));
 
     // Add or update annotations
+    const selectedAnns = annotations.filter((a) => a.selected);
+    if (selectedAnns.length > 0) {
+      console.log("[MapKit] selected annotations:", selectedAnns.map((a) => `${a.id} sel=${a.selected}`));
+    }
     annotations.forEach((a) => {
       let annotation = annotationsMapRef.current.get(a.id);
 
@@ -408,7 +412,7 @@ export default function MapKitMap({
             const canvas = createDroneIcon(heading, level, iconSz);
             canvas.style.cssText = `display:block;width:${iconSz}px;height:${iconSz}px;`;
             if (a.selected) {
-              canvas.style.filter = "drop-shadow(0 0 6px #00aaff) drop-shadow(0 0 12px #00aaff)";
+              wrapper.style.filter = "drop-shadow(0 0 8px #00aaff) drop-shadow(0 0 16px #00aaff) drop-shadow(0 0 24px #00aaff)";
             }
             wrapper.appendChild(canvas);
             if (tagLines.length > 0) {
@@ -418,7 +422,9 @@ export default function MapKitMap({
                 "font-family:system-ui,-apple-system,sans-serif;font-size:10px;line-height:1.3;" +
                 "color:rgba(255,255,255,0.95);text-shadow:0 1px 2px rgba(0,0,0,0.9);" +
                 "white-space:nowrap;pointer-events:none;" +
-                "background:rgba(0,0,0,0.55);padding:1px 4px;border-radius:3px;";
+                (a.selected
+                  ? "background:rgba(0,100,255,0.4);padding:1px 4px;border-radius:3px;border:1.5px solid #00aaff;"
+                  : "background:rgba(0,0,0,0.55);padding:1px 4px;border-radius:3px;");
               for (const line of tagLines) {
                 const div = document.createElement("div");
                 div.textContent = line;

@@ -366,7 +366,7 @@ export function createAircraftElement(
   const canvas = createAircraftIcon(headingDeg, alertLevel, iconSize);
   canvas.style.cssText = `display:block;width:${iconSize}px;height:${iconSize}px;`;
   if (selected) {
-    canvas.style.filter = "drop-shadow(0 0 6px #00aaff) drop-shadow(0 0 12px #00aaff)";
+    wrapper.style.filter = "drop-shadow(0 0 8px #00aaff) drop-shadow(0 0 16px #00aaff) drop-shadow(0 0 24px #00aaff)";
   }
   wrapper.appendChild(canvas);
 
@@ -377,8 +377,9 @@ export function createAircraftElement(
       "font-family:system-ui,-apple-system,sans-serif;font-size:10px;line-height:1.3;" +
       "color:#ffffff;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,1);" +
       "white-space:nowrap;pointer-events:none;" +
-      "background:rgba(0,0,0,0.75);padding:2px 5px;border-radius:3px;" +
-      "border:1px solid rgba(255,255,255,0.3);";
+      (selected
+        ? "background:rgba(0,100,255,0.4);padding:2px 5px;border-radius:3px;border:1.5px solid #00aaff;"
+        : "background:rgba(0,0,0,0.75);padding:2px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.3);");
     for (const line of dataTagLines) {
       const div = document.createElement("div");
       div.textContent = line;
