@@ -2665,7 +2665,7 @@ export default function App() {
 
                     {/* Actions — 2x2 grid */}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
-                      <button className="chipBtn compact" style={{ width: "100%" }} onClick={() => skyAlert.action("resetDefaults")}>
+                      <button className="chipBtn compact" style={{ width: "100%" }} onClick={async () => { await skyAlert.action("resetDefaults"); skyAlert.reload(); setSkyEdits(null); }}>
                         Reset Defaults
                       </button>
                       <button className="chipBtn compact" style={{ width: "100%" }} onClick={() => skyAlert.action("testAlarm")}>
@@ -2679,11 +2679,18 @@ export default function App() {
                       </button>
                     </div>
 
-                    {/* Open full settings */}
+                    {/* Refresh + Open full settings */}
                     <button
                       className="chipBtn compact"
-                      style={{ width: "100%", marginTop: 8, textAlign: "center", color: "#e4002b", borderColor: "rgba(228, 0, 43, 0.3)" }}
-                      onClick={() => window.open("http://192.168.4.1", "_blank")}
+                      style={{ width: "100%", marginTop: 8, textAlign: "center" }}
+                      onClick={() => { skyAlert.reload(); setSkyEdits(null); }}
+                    >
+                      Refresh skyAlert Values
+                    </button>
+                    <button
+                      className="chipBtn compact"
+                      style={{ width: "100%", marginTop: 6, textAlign: "center", color: "#e4002b", borderColor: "rgba(228, 0, 43, 0.3)" }}
+                      onClick={() => window.open("http://192.168.4.1/settings", "_blank")}
                     >
                       Open Full skyAlert Settings
                     </button>

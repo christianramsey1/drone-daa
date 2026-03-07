@@ -464,31 +464,34 @@ export default function MapKitMap({
           });
         } else if (a.style === "selection-ring") {
           // Pulsing selection ring around selected aircraft/drone
-          const sz = 64;
-          const c = document.createElement("canvas");
-          c.width = sz; c.height = sz;
-          const ctx = c.getContext("2d")!;
           const ringColor = a.color ?? "#0af";
-          // Outer ring
-          ctx.strokeStyle = ringColor;
-          ctx.lineWidth = 3;
-          ctx.globalAlpha = 0.8;
-          ctx.beginPath();
-          ctx.arc(sz / 2, sz / 2, sz / 2 - 4, 0, Math.PI * 2);
-          ctx.stroke();
-          // Inner glow
-          ctx.strokeStyle = ringColor;
-          ctx.lineWidth = 1.5;
-          ctx.globalAlpha = 0.4;
-          ctx.beginPath();
-          ctx.arc(sz / 2, sz / 2, sz / 2 - 10, 0, Math.PI * 2);
-          ctx.stroke();
-          annotation = new mapkit.ImageAnnotation(coord, {
+          annotation = new mapkit.Annotation(coord, () => {
+            const el = document.createElement("div");
+            const sz = 80;
+            el.style.cssText = `
+              width:${sz}px;height:${sz}px;
+              border: 2.5px solid ${ringColor};
+              border-radius: 50%;
+              box-shadow: 0 0 12px ${ringColor}, inset 0 0 8px ${ringColor}40;
+              pointer-events: none;
+              animation: selectionPulse 1.5s ease-in-out infinite;
+            `;
+            // Inject animation keyframes if not present
+            if (!document.getElementById("selection-ring-style")) {
+              const style = document.createElement("style");
+              style.id = "selection-ring-style";
+              style.textContent = `@keyframes selectionPulse {
+                0%, 100% { opacity: 0.9; transform: scale(1); }
+                50% { opacity: 0.5; transform: scale(1.15); }
+              }`;
+              document.head.appendChild(style);
+            }
+            return el;
+          }, {
             data: { id: a.id, style: a.style },
-            url: { 1: c.toDataURL() },
-            size: { width: sz, height: sz },
             anchorOffset: new DOMPoint(0, 0),
             calloutEnabled: false,
+            animates: false,
           });
         } else if (a.style === "obstruction") {
           // Tiny orange triangle for obstructions — no labels
