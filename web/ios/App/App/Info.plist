@@ -55,11 +55,18 @@
 	<false/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>DroneDAA uses Bluetooth to detect nearby drones broadcasting Remote ID signals for airspace awareness.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>DroneDAA uses Bluetooth to detect nearby drones broadcasting Remote ID signals for airspace awareness.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>DroneDAA receives ADS-B flight data from your local ADS-B receiver over the local network.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_gdl90._udp</string>
 	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

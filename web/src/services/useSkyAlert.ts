@@ -144,7 +144,11 @@ export function useSkyAlert(adsbConnected: boolean): SkyAlertState {
   const action = useCallback(async (name: string): Promise<boolean> => {
     setError(null);
     try {
-      const res = await fetch(`${base()}/settings/?action=${name}`, { method: "POST" });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      // skyAlert actions use GET requests
+      const res = await fetch(`${base()}/settings/?action=${name}`, { signal: controller.signal });
+      clearTimeout(timeout);
       return res.ok;
     } catch (err: any) {
       if (mountedRef.current) setError(err?.message ?? `Action ${name} failed`);

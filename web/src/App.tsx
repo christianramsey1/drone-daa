@@ -1238,11 +1238,27 @@ export default function App() {
     }));
   }, [faa.obstructions]);
 
+  // Selection ring for selected aircraft/drone
+  const selectionRingAnnotation: Annotation | null = useMemo(() => {
+    if (selectedAircraft) {
+      const ac = sortedAircraft.find((a) => a.id === selectedAircraft);
+      if (ac) return { id: "selection-ring", lat: ac.lat, lon: ac.lon, style: "selection-ring", color: "#0af" };
+    }
+    if (selectedDrone) {
+      const d = sortedDrones.find((d) => d.id === selectedDrone);
+      if (d) return { id: "selection-ring", lat: d.lat, lon: d.lon, style: "selection-ring", color: "#0af" };
+    }
+    return null;
+  }, [selectedAircraft, selectedDrone, sortedAircraft, sortedDrones]);
+
+  const selectedAnnotationId = selectedAircraft ? `adsb-${selectedAircraft}` : selectedDrone ? `rid-${selectedDrone}` : null;
+
   const allMapAnnotations: Annotation[] = useMemo(() => [
     ...mapAnnotations,
     ...droneAnnotations,
     ...obstructionAnnotations,
-  ], [mapAnnotations, droneAnnotations, obstructionAnnotations]);
+    ...(selectionRingAnnotation ? [selectionRingAnnotation] : []),
+  ], [mapAnnotations, droneAnnotations, obstructionAnnotations, selectionRingAnnotation]);
 
   // ── Tile overlays (VFR Sectional chart) ─────────────────────────
   const VFR_SECTIONAL_URL = "https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}";
@@ -1317,6 +1333,7 @@ export default function App() {
             annotations={allMapAnnotations}
             polylines={allMapPolylines}
             tileOverlays={mapTileOverlays}
+            selectedId={selectedAnnotationId}
             onSelect={handleAnnotationSelect}
             onViewChange={(_zoom, bounds) => {
               setMapBbox(bounds);
@@ -2293,6 +2310,83 @@ export default function App() {
 
             {panelTab === "adsb" && (
               <div className="panelSection">
+                {/* Aircraft Display */}
+                <div className="sectionTitle">Aircraft Display</div>
+                <div className="row">
+                  <span className="rowTitle">Icon Size</span>
+                  <div className="btnRow">
+                    {(["small", "medium", "large"] as const).map((sz) => (
+                      <button
+                        key={sz}
+                        className={`chipBtn compact ${aircraftDisplay.iconSize === sz ? "active" : ""}`}
+                        onClick={() => setAircraftDisplay((s) => ({ ...s, iconSize: sz }))}
+                      >
+                        {sz === "small" ? "S" : sz === "medium" ? "M" : "L"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="sectionTitle" style={{ fontSize: 12, marginTop: 4 }}>Data Tag</div>
+                {[
+                  { idx: 0, label: "Callsign / ICAO" },
+                  { idx: 1, label: "Altitude & Speed" },
+                  { idx: 2, label: "Category" },
+                ].map(({ idx, label }) => (
+                  <div className="row" key={idx}>
+                    <span className="rowTitle">{label}</span>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={aircraftDisplay.dataTagLines[idx]}
+                        onChange={() =>
+                          setAircraftDisplay((s) => {
+                            const lines = [...s.dataTagLines] as [boolean, boolean, boolean];
+                            lines[idx] = !lines[idx];
+                            return { ...s, dataTagLines: lines };
+                          })
+                        }
+                      />
+                      <span className="slider" />
+                    </label>
+                  </div>
+                ))}
+                <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span className="rowTitle">Trailing Breadcrumbs</span>
+                    <span className="smallMuted">
+                      {aircraftDisplay.trailingBreadcrumbs === 0 ? "Off" : aircraftDisplay.trailingBreadcrumbs}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0} max={20} step={1}
+                    value={aircraftDisplay.trailingBreadcrumbs}
+                    onChange={(e) =>
+                      setAircraftDisplay((s) => ({ ...s, trailingBreadcrumbs: Number(e.target.value) }))
+                    }
+                    className="settingsRange"
+                  />
+                </div>
+                <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span className="rowTitle">Velocity Vector</span>
+                    <span className="smallMuted">
+                      {aircraftDisplay.velocityVector === 0 ? "Off" : `${aircraftDisplay.velocityVector}s`}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0} max={120} step={5}
+                    value={aircraftDisplay.velocityVector}
+                    onChange={(e) =>
+                      setAircraftDisplay((s) => ({ ...s, velocityVector: Number(e.target.value) }))
+                    }
+                    className="settingsRange"
+                  />
+                </div>
+
+                <div className="divider" />
+
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div className="sectionTitle">Live Flights</div>
                   <span className="smallMuted">{adsb.count} tracked</span>
@@ -2425,15 +2519,73 @@ export default function App() {
                 </div>
 
                 {skyAlert.detected && skyValues && (
-                  <>
-                    <div className="divider" />
+                  <div style={{
+                    marginTop: 12,
+                    borderLeft: "3px solid #e4002b",
+                    paddingLeft: 12,
+                  }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div className="sectionTitle">skyAlert Configuration</div>
+                      <div className="sectionTitle" style={{ color: "#e4002b" }}>skyAlert</div>
                       {skyAlert.loading && <span className="smallMuted">loading...</span>}
                     </div>
 
+                    {/* Unsaved changes banner */}
+                    {skyDirty && (
+                      <div style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "6px 10px", borderRadius: 6, marginBottom: 8,
+                        background: "rgba(228, 0, 43, 0.15)", border: "1px solid rgba(228, 0, 43, 0.4)",
+                      }}>
+                        <span style={{ fontSize: 11, color: "#e4002b", fontWeight: 600 }}>Unsaved changes</span>
+                        <button
+                          className="chipBtn compact active"
+                          style={{ fontSize: 11, padding: "2px 10px" }}
+                          disabled={skyAlert.saving}
+                          onClick={async () => {
+                            const ok = await skyAlert.save(skyValues);
+                            if (ok) setSkyEdits(null);
+                          }}
+                        >
+                          {skyAlert.saving ? "Saving..." : "Push to skyAlert"}
+                        </button>
+                      </div>
+                    )}
+
                     {/* Traffic Proximity Alarm */}
                     <div className="sectionTitle" style={{ fontSize: 12, marginTop: 4 }}>Traffic Proximity Alarm</div>
+
+                    {/* Quick-set from alert volumes — stacked full-width */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+                      <button
+                        className="chipBtn compact"
+                        style={{ borderColor: "rgba(255, 214, 10, 0.4)", color: "#ffd60a", fontSize: 11, width: "100%", textAlign: "center" }}
+                        onClick={() => {
+                          const rangeFt = Math.round(alertVolumes.outerRangeNm * 6076.12);
+                          setSkyEdits((prev) => ({ ...prev, trafficProximityAlert: {
+                            ...skyValues.trafficProximityAlert, ...prev?.trafficProximityAlert,
+                            altitude_ft: alertVolumes.outerCeilingFt,
+                            range_m: rangeFt * 0.3048,
+                          }}));
+                        }}
+                      >
+                        Match Caution Alert ({alertVolumes.outerRangeNm} nm / {alertVolumes.outerCeilingFt.toLocaleString()} ft)
+                      </button>
+                      <button
+                        className="chipBtn compact"
+                        style={{ borderColor: "rgba(255, 69, 58, 0.4)", color: "#ff453a", fontSize: 11, width: "100%", textAlign: "center" }}
+                        onClick={() => {
+                          const rangeFt = Math.round(alertVolumes.innerRangeNm * 6076.12);
+                          setSkyEdits((prev) => ({ ...prev, trafficProximityAlert: {
+                            ...skyValues.trafficProximityAlert, ...prev?.trafficProximityAlert,
+                            altitude_ft: alertVolumes.innerCeilingFt,
+                            range_m: rangeFt * 0.3048,
+                          }}));
+                        }}
+                      >
+                        Match Warning Alert ({alertVolumes.innerRangeNm} nm / {alertVolumes.innerCeilingFt.toLocaleString()} ft)
+                      </button>
+                    </div>
+
                     <div className="row">
                       <span className="rowTitle">Altitude Limit (ft)</span>
                       <input
@@ -2467,8 +2619,11 @@ export default function App() {
                         onChange={(e) => setSkyEdits((prev) => ({ ...prev, trafficProximityAlert: { ...skyValues.trafficProximityAlert, ...prev?.trafficProximityAlert, volume: Number(e.target.value) } }))}
                       />
                     </div>
+
+                    {/* Ownship Filter */}
+                    <div className="sectionTitle" style={{ fontSize: 12, marginTop: 8 }}>Ownship Filter</div>
                     <div className="row">
-                      <span className="rowTitle">Ownship ICAO (0x)</span>
+                      <span className="rowTitle">ICAO Address (0x)</span>
                       <input
                         type="text"
                         className="settingsInput"
@@ -2479,6 +2634,7 @@ export default function App() {
                         placeholder="000000"
                       />
                     </div>
+                    <p className="smallMuted" style={{ marginTop: 2 }}>skyAlert will not alarm on this ICAO address.</p>
 
                     {/* LED Control */}
                     <div className="sectionTitle" style={{ fontSize: 12, marginTop: 8 }}>LED Control</div>
@@ -2507,121 +2663,36 @@ export default function App() {
                       />
                     </div>
 
-                    {/* Save + Actions */}
-                    <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                      <button
-                        className={`chipBtn${skyDirty ? " active" : ""}`}
-                        disabled={!skyDirty || skyAlert.saving}
-                        onClick={async () => {
-                          if (!skyValues) return;
-                          const ok = await skyAlert.save(skyValues);
-                          if (ok) setSkyEdits(null);
-                        }}
-                      >
-                        {skyAlert.saving ? "Saving..." : "Save"}
+                    {/* Actions — 2x2 grid */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
+                      <button className="chipBtn compact" style={{ width: "100%" }} onClick={() => skyAlert.action("resetDefaults")}>
+                        Reset Defaults
                       </button>
-                      <button className="chipBtn compact" onClick={() => skyAlert.action("reset")}>
-                        Reset
-                      </button>
-                      <button className="chipBtn compact" onClick={() => skyAlert.action("testAlarm")}>
+                      <button className="chipBtn compact" style={{ width: "100%" }} onClick={() => skyAlert.action("testAlarm")}>
                         Test Alarm
                       </button>
-                      <button className="chipBtn compact" onClick={() => skyAlert.action("silenceAlarm")}>
-                        Silence
+                      <button className="chipBtn compact" style={{ width: "100%" }} onClick={() => skyAlert.action("silenceAlarm")}>
+                        Silence Alarm
                       </button>
-                      <button className="chipBtn compact" onClick={() => skyAlert.action("testLeds")}>
+                      <button className="chipBtn compact" style={{ width: "100%" }} onClick={() => skyAlert.action("testLeds")}>
                         Test LEDs
                       </button>
                     </div>
+
+                    {/* Open full settings */}
+                    <button
+                      className="chipBtn compact"
+                      style={{ width: "100%", marginTop: 8, textAlign: "center", color: "#e4002b", borderColor: "rgba(228, 0, 43, 0.3)" }}
+                      onClick={() => window.open("http://192.168.4.1", "_blank")}
+                    >
+                      Open Full skyAlert Settings
+                    </button>
+
                     {skyAlert.error && (
                       <p className="errText" style={{ marginTop: 4 }}>{skyAlert.error}</p>
                     )}
-                  </>
+                  </div>
                 )}
-
-                <div className="divider" />
-
-                <div className="sectionTitle">Aircraft Display</div>
-
-                {/* Icon Size */}
-                <div className="row">
-                  <span className="rowTitle">Icon Size</span>
-                  <div className="btnRow">
-                    {(["small", "medium", "large"] as const).map((sz) => (
-                      <button
-                        key={sz}
-                        className={`chipBtn compact ${aircraftDisplay.iconSize === sz ? "active" : ""}`}
-                        onClick={() => setAircraftDisplay((s) => ({ ...s, iconSize: sz }))}
-                      >
-                        {sz === "small" ? "S" : sz === "medium" ? "M" : "L"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Data Tag Lines */}
-                <div className="sectionTitle" style={{ fontSize: 12, marginTop: 4 }}>Data Tag</div>
-                {[
-                  { idx: 0, label: "Callsign / ICAO" },
-                  { idx: 1, label: "Altitude & Speed" },
-                  { idx: 2, label: "Category" },
-                ].map(({ idx, label }) => (
-                  <div className="row" key={idx}>
-                    <span className="rowTitle">{label}</span>
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={aircraftDisplay.dataTagLines[idx]}
-                        onChange={() =>
-                          setAircraftDisplay((s) => {
-                            const lines = [...s.dataTagLines] as [boolean, boolean, boolean];
-                            lines[idx] = !lines[idx];
-                            return { ...s, dataTagLines: lines };
-                          })
-                        }
-                      />
-                      <span className="slider" />
-                    </label>
-                  </div>
-                ))}
-
-                {/* Trailing Breadcrumbs */}
-                <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span className="rowTitle">Trailing Breadcrumbs</span>
-                    <span className="smallMuted">
-                      {aircraftDisplay.trailingBreadcrumbs === 0 ? "Off" : aircraftDisplay.trailingBreadcrumbs}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0} max={20} step={1}
-                    value={aircraftDisplay.trailingBreadcrumbs}
-                    onChange={(e) =>
-                      setAircraftDisplay((s) => ({ ...s, trailingBreadcrumbs: Number(e.target.value) }))
-                    }
-                    className="settingsRange"
-                  />
-                </div>
-
-                {/* Velocity Vector */}
-                <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span className="rowTitle">Velocity Vector</span>
-                    <span className="smallMuted">
-                      {aircraftDisplay.velocityVector === 0 ? "Off" : `${aircraftDisplay.velocityVector}s`}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0} max={120} step={5}
-                    value={aircraftDisplay.velocityVector}
-                    onChange={(e) =>
-                      setAircraftDisplay((s) => ({ ...s, velocityVector: Number(e.target.value) }))
-                    }
-                    className="settingsRange"
-                  />
-                </div>
 
                 <div className="divider" />
 

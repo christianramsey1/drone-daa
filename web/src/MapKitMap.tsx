@@ -462,6 +462,34 @@ export default function MapKitMap({
             anchorOffset: new DOMPoint(0, 0),
             calloutEnabled: false,
           });
+        } else if (a.style === "selection-ring") {
+          // Pulsing selection ring around selected aircraft/drone
+          const sz = 64;
+          const c = document.createElement("canvas");
+          c.width = sz; c.height = sz;
+          const ctx = c.getContext("2d")!;
+          const ringColor = a.color ?? "#0af";
+          // Outer ring
+          ctx.strokeStyle = ringColor;
+          ctx.lineWidth = 3;
+          ctx.globalAlpha = 0.8;
+          ctx.beginPath();
+          ctx.arc(sz / 2, sz / 2, sz / 2 - 4, 0, Math.PI * 2);
+          ctx.stroke();
+          // Inner glow
+          ctx.strokeStyle = ringColor;
+          ctx.lineWidth = 1.5;
+          ctx.globalAlpha = 0.4;
+          ctx.beginPath();
+          ctx.arc(sz / 2, sz / 2, sz / 2 - 10, 0, Math.PI * 2);
+          ctx.stroke();
+          annotation = new mapkit.ImageAnnotation(coord, {
+            data: { id: a.id, style: a.style },
+            url: { 1: c.toDataURL() },
+            size: { width: sz, height: sz },
+            anchorOffset: new DOMPoint(0, 0),
+            calloutEnabled: false,
+          });
         } else if (a.style === "obstruction") {
           // Tiny orange triangle for obstructions — no labels
           const sz = 8;
