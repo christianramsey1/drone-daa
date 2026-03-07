@@ -34,6 +34,7 @@ export type Annotation = {
   iconSize?: number;
   dataTagLines?: string[];
   alertLevel?: "normal" | "caution" | "warning";
+  selected?: boolean;
 };
 
 export type Polyline = {
@@ -60,7 +61,6 @@ type Props = {
   annotations?: Annotation[];
   polylines?: Polyline[];
   tileOverlays?: TileOverlayConfig[];
-  selectionCircle?: { lat: number; lon: number } | null;
   onSelect?: (id: string) => void;
   onMapClick?: (lat: number, lon: number) => void;
   onOverlaySelect?: (id: string) => void;
@@ -135,7 +135,6 @@ export default function MapKitMap({
   annotations = [],
   polylines = [],
   tileOverlays = [],
-  selectionCircle,
   onSelect,
   onMapClick,
   onOverlaySelect,
@@ -305,7 +304,8 @@ export default function MapKitMap({
         const iconSz = a.iconSize ?? 32;
         const tagLines = a.dataTagLines ?? [];
         const level = a.alertLevel ?? "normal";
-        const newKey = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${tagLines.join("|")}`;
+        const sel = a.selected ? "1" : "0";
+        const newKey = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${sel}_${tagLines.join("|")}`;
         if (annotation.data?._key !== newKey) {
           map.removeAnnotation(annotation);
           annotationsMapRef.current.delete(a.id);
@@ -382,10 +382,11 @@ export default function MapKitMap({
           const iconSz = a.iconSize ?? 32;
           const tagLines = a.dataTagLines ?? [];
           const level = a.alertLevel ?? "normal";
-          const _key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${tagLines.join("|")}`;
+          const sel = a.selected ? "1" : "0";
+          const _key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${sel}_${tagLines.join("|")}`;
 
           annotation = new mapkit.Annotation(coord, () => {
-            return createAircraftElement(heading, level, iconSz, tagLines);
+            return createAircraftElement(heading, level, iconSz, tagLines, a.selected);
           }, {
             data: { id: a.id, style: a.style, kind: a.kind, heading, _key },
             anchorOffset: new DOMPoint(0, -iconSz / 2),
@@ -398,13 +399,17 @@ export default function MapKitMap({
           const iconSz = a.iconSize ?? 28;
           const tagLines = a.dataTagLines ?? [];
           const level = a.alertLevel ?? "normal";
-          const _key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${tagLines.join("|")}`;
+          const sel = a.selected ? "1" : "0";
+          const _key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${sel}_${tagLines.join("|")}`;
 
           annotation = new mapkit.Annotation(coord, () => {
             const wrapper = document.createElement("div");
             wrapper.style.cssText = `width:${iconSz}px;height:${iconSz}px;position:relative;overflow:visible;`;
             const canvas = createDroneIcon(heading, level, iconSz);
             canvas.style.cssText = `display:block;width:${iconSz}px;height:${iconSz}px;`;
+            if (a.selected) {
+              canvas.style.filter = "drop-shadow(0 0 6px #00aaff) drop-shadow(0 0 12px #00aaff)";
+            }
             wrapper.appendChild(canvas);
             if (tagLines.length > 0) {
               const tag = document.createElement("div");
@@ -628,36 +633,6 @@ export default function MapKitMap({
       }
     });
   }, [tileOverlays, status]);
-
-  // Selection circle overlay
-  const selectionOverlayRef = useRef<any>(null);
-  useEffect(() => {
-    if (!mapRef.current || !window.mapkit || status !== "ready") return;
-    const map = mapRef.current;
-    const mk = window.mapkit;
-
-    // Remove previous
-    if (selectionOverlayRef.current) {
-      map.removeOverlay(selectionOverlayRef.current);
-      selectionOverlayRef.current = null;
-    }
-
-    if (selectionCircle) {
-      const center = new mk.Coordinate(selectionCircle.lat, selectionCircle.lon);
-      // Radius in meters — 300m gives a visible circle at typical zoom levels
-      const circle = new mk.CircleOverlay(center, 300, {
-        style: new mk.Style({
-          strokeColor: "#00aaff",
-          strokeOpacity: 0.9,
-          lineWidth: 2.5,
-          fillColor: "#00aaff",
-          fillOpacity: 0.08,
-        }),
-      });
-      map.addOverlay(circle);
-      selectionOverlayRef.current = circle;
-    }
-  }, [selectionCircle, status]);
 
   return (
     <div

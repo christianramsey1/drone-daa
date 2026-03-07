@@ -357,6 +357,7 @@ export function createAircraftElement(
   alertLevel: string,
   iconSize: number,
   dataTagLines: string[],
+  selected?: boolean,
 ): HTMLDivElement {
   const wrapper = document.createElement("div");
   wrapper.style.cssText =
@@ -364,6 +365,9 @@ export function createAircraftElement(
 
   const canvas = createAircraftIcon(headingDeg, alertLevel, iconSize);
   canvas.style.cssText = `display:block;width:${iconSize}px;height:${iconSize}px;`;
+  if (selected) {
+    canvas.style.filter = "drop-shadow(0 0 6px #00aaff) drop-shadow(0 0 12px #00aaff)";
+  }
   wrapper.appendChild(canvas);
 
   if (dataTagLines.length > 0) {

@@ -141,45 +141,32 @@ export function useSkyAlert(adsbConnected: boolean): SkyAlertState {
     }
   }, [fetchSettings]);
 
-  // On first detection, fetch the settings page HTML and log the script content
-  // so we can discover the correct action button endpoints
-  const debugDoneRef = useRef(false);
-  useEffect(() => {
-    if (!detected || debugDoneRef.current) return;
-    debugDoneRef.current = true;
-    (async () => {
-      try {
-        const res = await fetch(`${base()}/settings/`);
-        const html = await res.text();
-        // Extract all script contents
-        const scripts = html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
-        if (scripts) {
-          scripts.forEach((s, i) => {
-            console.log(`[skyAlert] settings page script #${i}:`, s);
-          });
-        }
-        // Also log onclick handlers
-        const onclicks = html.match(/onclick="[^"]*"/gi);
-        if (onclicks) {
-          console.log("[skyAlert] onclick handlers found:", onclicks);
-        }
-      } catch (e) {
-        console.log("[skyAlert] failed to fetch settings HTML for debug", e);
-      }
-    })();
-  }, [detected]);
+  // skyAlert actions all use POST /settings/?action=set with special JSON payloads
+  const ACTION_PAYLOADS: Record<string, object> = {
+    resetDefaults: { loadDefaults: true },
+    testAlarm: { tests: { coAlarm: true } },
+    silenceAlarm: { tests: { coAlarm: false } },
+    testLeds: { tests: { LED: true } },
+  };
 
   const action = useCallback(async (name: string): Promise<boolean> => {
     setError(null);
+    const payload = ACTION_PAYLOADS[name];
+    if (!payload) {
+      setError(`Unknown action: ${name}`);
+      return false;
+    }
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5_000);
-      const url = `${base()}/settings/?action=${name}`;
-      console.log(`[skyAlert] action GET ${url}`);
-      const res = await fetch(url, { signal: controller.signal });
+      const res = await fetch(`${base()}/settings/?action=set`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
       clearTimeout(timeout);
-      const text = await res.text();
-      console.log(`[skyAlert] action GET ${url} → ${res.status}, body length: ${text.length}, first 200 chars:`, text.substring(0, 200));
+      console.log(`[skyAlert] action ${name} → ${res.status}`);
       return res.ok;
     } catch (err: any) {
       if (mountedRef.current) setError(err?.message ?? `Action ${name} failed`);

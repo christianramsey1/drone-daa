@@ -1049,6 +1049,7 @@ export default function App() {
         iconSize: iconSizePx,
         dataTagLines: tagLines,
         alertLevel: ac._alertLevel,
+        selected: selectedAircraft === ac.id,
       });
     }
 
@@ -1067,7 +1068,7 @@ export default function App() {
     }
 
     return result;
-  }, [sortedAircraft, aircraftDisplay, iconSizePx, gps?.lat, gps?.lon, mapLayer]);
+  }, [sortedAircraft, aircraftDisplay, iconSizePx, gps?.lat, gps?.lon, mapLayer, selectedAircraft]);
 
   // ── Polylines: breadcrumbs + velocity vectors ──────────────────────
 
@@ -1172,6 +1173,7 @@ export default function App() {
           `${Math.round(drone.altFt)} ft ${Math.round(drone.speedKts)} kts`,
         ],
         alertLevel: drone._alertLevel,
+        selected: selectedDrone === drone.id,
       });
 
       // Operator / takeoff location marker (skip 0,0 — means no fix)
@@ -1188,7 +1190,7 @@ export default function App() {
       }
     }
     return result;
-  }, [sortedDrones]);
+  }, [sortedDrones, selectedDrone]);
 
   // ── Drone-to-operator/takeoff connecting lines ───────────────────
 
@@ -1237,19 +1239,6 @@ export default function App() {
       color: "#fb923c",
     }));
   }, [faa.obstructions]);
-
-  // Selection circle for selected aircraft/drone
-  const selectionCircle = useMemo(() => {
-    if (selectedAircraft) {
-      const ac = sortedAircraft.find((a) => a.id === selectedAircraft);
-      if (ac) return { lat: ac.lat, lon: ac.lon };
-    }
-    if (selectedDrone) {
-      const d = sortedDrones.find((d) => d.id === selectedDrone);
-      if (d) return { lat: d.lat, lon: d.lon };
-    }
-    return null;
-  }, [selectedAircraft, selectedDrone, sortedAircraft, sortedDrones]);
 
   const allMapAnnotations: Annotation[] = useMemo(() => [
     ...mapAnnotations,
@@ -1330,7 +1319,6 @@ export default function App() {
             annotations={allMapAnnotations}
             polylines={allMapPolylines}
             tileOverlays={mapTileOverlays}
-            selectionCircle={selectionCircle}
             onSelect={handleAnnotationSelect}
             onViewChange={(_zoom, bounds) => {
               setMapBbox(bounds);
@@ -2663,7 +2651,7 @@ export default function App() {
 
                     {/* Actions — 2x2 grid */}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
-                      <button className="chipBtn compact" style={{ width: "100%" }} onClick={async () => { await skyAlert.action("resetDefaults"); skyAlert.reload(); setSkyEdits(null); }}>
+                      <button className="chipBtn compact" style={{ width: "100%" }} onClick={async () => { await skyAlert.action("resetDefaults"); setSkyEdits(null); setTimeout(() => skyAlert.reload(), 2000); }}>
                         Reset Defaults
                       </button>
                       <button className="chipBtn compact" style={{ width: "100%" }} onClick={() => skyAlert.action("testAlarm")}>
