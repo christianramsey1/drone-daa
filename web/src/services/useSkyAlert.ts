@@ -143,26 +143,27 @@ export function useSkyAlert(adsbConnected: boolean): SkyAlertState {
 
   const action = useCallback(async (name: string): Promise<boolean> => {
     setError(null);
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5_000);
-      // skyAlert actions: POST with action in query string
-      const res = await fetch(`${base()}/settings/?action=${name}`, {
-        method: "POST",
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      if (res.ok) return true;
-      // Fallback: try GET if POST fails
-      const controller2 = new AbortController();
-      const timeout2 = setTimeout(() => controller2.abort(), 5_000);
-      const res2 = await fetch(`${base()}/settings/?action=${name}`, { signal: controller2.signal });
-      clearTimeout(timeout2);
-      return res2.ok;
-    } catch (err: any) {
-      if (mountedRef.current) setError(err?.message ?? `Action ${name} failed`);
-      return false;
+    const urls = [
+      `${base()}/settings/?action=${name}`,
+      `${base()}/?action=${name}`,
+    ];
+    for (const url of urls) {
+      for (const method of ["GET", "POST"] as const) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5_000);
+          console.log(`[skyAlert] action ${method} ${url}`);
+          const res = await fetch(url, { method, signal: controller.signal });
+          clearTimeout(timeout);
+          console.log(`[skyAlert] action ${method} ${url} → ${res.status}`);
+          if (res.ok) return true;
+        } catch (err) {
+          console.log(`[skyAlert] action ${method} ${url} → error`, err);
+        }
+      }
     }
+    if (mountedRef.current) setError(`Action ${name} failed — check console for details`);
+    return false;
   }, []);
 
   if (!adsbConnected) return EMPTY;

@@ -60,7 +60,6 @@ type Props = {
   annotations?: Annotation[];
   polylines?: Polyline[];
   tileOverlays?: TileOverlayConfig[];
-  selectedId?: string | null;
   onSelect?: (id: string) => void;
   onMapClick?: (lat: number, lon: number) => void;
   onOverlaySelect?: (id: string) => void;
@@ -135,7 +134,6 @@ export default function MapKitMap({
   annotations = [],
   polylines = [],
   tileOverlays = [],
-  selectedId,
   onSelect,
   onMapClick,
   onOverlaySelect,
@@ -543,14 +541,8 @@ export default function MapKitMap({
         annotation.subtitle = a.subtitle;
       }
 
-      // Update selection state
-      if (selectedId === a.id) {
-        annotation.selected = true;
-      } else {
-        annotation.selected = false;
-      }
     });
-  }, [annotations, status, selectedId, onSelect]);
+  }, [annotations, status, onSelect]);
 
   // Update polylines
   useEffect(() => {

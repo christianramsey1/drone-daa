@@ -1251,8 +1251,6 @@ export default function App() {
     return null;
   }, [selectedAircraft, selectedDrone, sortedAircraft, sortedDrones]);
 
-  const selectedAnnotationId = selectedAircraft ? `adsb-${selectedAircraft}` : selectedDrone ? `rid-${selectedDrone}` : null;
-
   const allMapAnnotations: Annotation[] = useMemo(() => [
     ...mapAnnotations,
     ...droneAnnotations,
@@ -1333,7 +1331,6 @@ export default function App() {
             annotations={allMapAnnotations}
             polylines={allMapPolylines}
             tileOverlays={mapTileOverlays}
-            selectedId={selectedAnnotationId}
             onSelect={handleAnnotationSelect}
             onViewChange={(_zoom, bounds) => {
               setMapBbox(bounds);
@@ -1391,7 +1388,8 @@ export default function App() {
             <div className="tabRow">
               {([["details", "Details"], ["weather", "Weather"], ["settings", "Settings"], ["howto", "How To"]] as const).map(([id, label]) => (
                 <button key={id} className={`tabBtn ${panelTab === id ? "active" : ""}`}
-                  onClick={() => setPanelTab(id)}>{label}</button>
+                  style={id === "settings" && skyAlert.detected ? { color: "#e4002b" } : undefined}
+                  onClick={() => setPanelTab(id)}>{id === "settings" && skyAlert.detected ? "skyAlert" : label}</button>
               ))}
             </div>
           </div>
