@@ -1238,15 +1238,15 @@ export default function App() {
     }));
   }, [faa.obstructions]);
 
-  // Selection ring for selected aircraft/drone
-  const selectionRingAnnotation: Annotation | null = useMemo(() => {
+  // Selection circle for selected aircraft/drone
+  const selectionCircle = useMemo(() => {
     if (selectedAircraft) {
       const ac = sortedAircraft.find((a) => a.id === selectedAircraft);
-      if (ac) return { id: "selection-ring", lat: ac.lat, lon: ac.lon, style: "selection-ring", color: "#0af" };
+      if (ac) return { lat: ac.lat, lon: ac.lon };
     }
     if (selectedDrone) {
       const d = sortedDrones.find((d) => d.id === selectedDrone);
-      if (d) return { id: "selection-ring", lat: d.lat, lon: d.lon, style: "selection-ring", color: "#0af" };
+      if (d) return { lat: d.lat, lon: d.lon };
     }
     return null;
   }, [selectedAircraft, selectedDrone, sortedAircraft, sortedDrones]);
@@ -1255,8 +1255,7 @@ export default function App() {
     ...mapAnnotations,
     ...droneAnnotations,
     ...obstructionAnnotations,
-    ...(selectionRingAnnotation ? [selectionRingAnnotation] : []),
-  ], [mapAnnotations, droneAnnotations, obstructionAnnotations, selectionRingAnnotation]);
+  ], [mapAnnotations, droneAnnotations, obstructionAnnotations]);
 
   // ── Tile overlays (VFR Sectional chart) ─────────────────────────
   const VFR_SECTIONAL_URL = "https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}";
@@ -1331,6 +1330,7 @@ export default function App() {
             annotations={allMapAnnotations}
             polylines={allMapPolylines}
             tileOverlays={mapTileOverlays}
+            selectionCircle={selectionCircle}
             onSelect={handleAnnotationSelect}
             onViewChange={(_zoom, bounds) => {
               setMapBbox(bounds);

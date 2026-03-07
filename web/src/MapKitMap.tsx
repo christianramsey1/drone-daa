@@ -60,6 +60,7 @@ type Props = {
   annotations?: Annotation[];
   polylines?: Polyline[];
   tileOverlays?: TileOverlayConfig[];
+  selectionCircle?: { lat: number; lon: number } | null;
   onSelect?: (id: string) => void;
   onMapClick?: (lat: number, lon: number) => void;
   onOverlaySelect?: (id: string) => void;
@@ -134,6 +135,7 @@ export default function MapKitMap({
   annotations = [],
   polylines = [],
   tileOverlays = [],
+  selectionCircle,
   onSelect,
   onMapClick,
   onOverlaySelect,
@@ -460,37 +462,6 @@ export default function MapKitMap({
             anchorOffset: new DOMPoint(0, 0),
             calloutEnabled: false,
           });
-        } else if (a.style === "selection-ring") {
-          // Pulsing selection ring around selected aircraft/drone
-          const ringColor = a.color ?? "#0af";
-          annotation = new mapkit.Annotation(coord, () => {
-            const el = document.createElement("div");
-            const sz = 80;
-            el.style.cssText = `
-              width:${sz}px;height:${sz}px;
-              border: 2.5px solid ${ringColor};
-              border-radius: 50%;
-              box-shadow: 0 0 12px ${ringColor}, inset 0 0 8px ${ringColor}40;
-              pointer-events: none;
-              animation: selectionPulse 1.5s ease-in-out infinite;
-            `;
-            // Inject animation keyframes if not present
-            if (!document.getElementById("selection-ring-style")) {
-              const style = document.createElement("style");
-              style.id = "selection-ring-style";
-              style.textContent = `@keyframes selectionPulse {
-                0%, 100% { opacity: 0.9; transform: scale(1); }
-                50% { opacity: 0.5; transform: scale(1.15); }
-              }`;
-              document.head.appendChild(style);
-            }
-            return el;
-          }, {
-            data: { id: a.id, style: a.style },
-            anchorOffset: new DOMPoint(0, 0),
-            calloutEnabled: false,
-            animates: false,
-          });
         } else if (a.style === "obstruction") {
           // Tiny orange triangle for obstructions — no labels
           const sz = 8;
@@ -657,6 +628,36 @@ export default function MapKitMap({
       }
     });
   }, [tileOverlays, status]);
+
+  // Selection circle overlay
+  const selectionOverlayRef = useRef<any>(null);
+  useEffect(() => {
+    if (!mapRef.current || !window.mapkit || status !== "ready") return;
+    const map = mapRef.current;
+    const mk = window.mapkit;
+
+    // Remove previous
+    if (selectionOverlayRef.current) {
+      map.removeOverlay(selectionOverlayRef.current);
+      selectionOverlayRef.current = null;
+    }
+
+    if (selectionCircle) {
+      const center = new mk.Coordinate(selectionCircle.lat, selectionCircle.lon);
+      // Radius in meters — 300m gives a visible circle at typical zoom levels
+      const circle = new mk.CircleOverlay(center, 300, {
+        style: new mk.Style({
+          strokeColor: "#00aaff",
+          strokeOpacity: 0.9,
+          lineWidth: 2.5,
+          fillColor: "#00aaff",
+          fillOpacity: 0.08,
+        }),
+      });
+      map.addOverlay(circle);
+      selectionOverlayRef.current = circle;
+    }
+  }, [selectionCircle, status]);
 
   return (
     <div

@@ -141,29 +141,50 @@ export function useSkyAlert(adsbConnected: boolean): SkyAlertState {
     }
   }, [fetchSettings]);
 
+  // On first detection, fetch the settings page HTML and log the script content
+  // so we can discover the correct action button endpoints
+  const debugDoneRef = useRef(false);
+  useEffect(() => {
+    if (!detected || debugDoneRef.current) return;
+    debugDoneRef.current = true;
+    (async () => {
+      try {
+        const res = await fetch(`${base()}/settings/`);
+        const html = await res.text();
+        // Extract all script contents
+        const scripts = html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
+        if (scripts) {
+          scripts.forEach((s, i) => {
+            console.log(`[skyAlert] settings page script #${i}:`, s);
+          });
+        }
+        // Also log onclick handlers
+        const onclicks = html.match(/onclick="[^"]*"/gi);
+        if (onclicks) {
+          console.log("[skyAlert] onclick handlers found:", onclicks);
+        }
+      } catch (e) {
+        console.log("[skyAlert] failed to fetch settings HTML for debug", e);
+      }
+    })();
+  }, [detected]);
+
   const action = useCallback(async (name: string): Promise<boolean> => {
     setError(null);
-    const urls = [
-      `${base()}/settings/?action=${name}`,
-      `${base()}/?action=${name}`,
-    ];
-    for (const url of urls) {
-      for (const method of ["GET", "POST"] as const) {
-        try {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 5_000);
-          console.log(`[skyAlert] action ${method} ${url}`);
-          const res = await fetch(url, { method, signal: controller.signal });
-          clearTimeout(timeout);
-          console.log(`[skyAlert] action ${method} ${url} → ${res.status}`);
-          if (res.ok) return true;
-        } catch (err) {
-          console.log(`[skyAlert] action ${method} ${url} → error`, err);
-        }
-      }
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5_000);
+      const url = `${base()}/settings/?action=${name}`;
+      console.log(`[skyAlert] action GET ${url}`);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      const text = await res.text();
+      console.log(`[skyAlert] action GET ${url} → ${res.status}, body length: ${text.length}, first 200 chars:`, text.substring(0, 200));
+      return res.ok;
+    } catch (err: any) {
+      if (mountedRef.current) setError(err?.message ?? `Action ${name} failed`);
+      return false;
     }
-    if (mountedRef.current) setError(`Action ${name} failed — check console for details`);
-    return false;
   }, []);
 
   if (!adsbConnected) return EMPTY;
