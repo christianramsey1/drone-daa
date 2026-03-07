@@ -915,6 +915,16 @@ export default function App() {
     tapMapPos?.lat, tapMapPos?.lon,
   ]);
 
+  // Auto-center map when center source config changes and resolves to a distant location
+  const prevCenterSourceRef = useRef(centerSource);
+  useEffect(() => {
+    if (prevCenterSourceRef.current === centerSource) return;
+    prevCenterSourceRef.current = centerSource;
+    if (resolvedCenter) {
+      setMapCenter({ lat: resolvedCenter.lat, lon: resolvedCenter.lon });
+    }
+  }, [centerSource, resolvedCenter]);
+
   // Track which tier is active (for display)
   const activeCenterTier: "primary" | "secondary" | "tertiary" = useMemo(() => {
     if (resolveSource(centerSource.primary)) return "primary";
@@ -1752,8 +1762,17 @@ export default function App() {
                 </div>
 
                 {resolvedCenter && (
-                  <div className="smallMuted" style={{ marginTop: 4 }}>
-                    Center: {resolvedCenter.lat.toFixed(4)}, {resolvedCenter.lon.toFixed(4)}
+                  <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="smallMuted">
+                      Center: {resolvedCenter.lat.toFixed(4)}, {resolvedCenter.lon.toFixed(4)}
+                    </span>
+                    <button
+                      className="chipBtn compact"
+                      style={{ fontSize: 10, padding: "2px 8px" }}
+                      onClick={() => setMapCenter({ lat: resolvedCenter.lat, lon: resolvedCenter.lon })}
+                    >
+                      Center Map
+                    </button>
                   </div>
                 )}
 
