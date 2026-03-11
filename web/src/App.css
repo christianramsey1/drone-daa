@@ -49,6 +49,14 @@ select option {
   z-index: 1;
 }
 
+/* Leaflet controls: respect notch / Dynamic Island safe area */
+.mapLayer .leaflet-top {
+  top: max(10px, env(safe-area-inset-top, 0px));
+}
+.mapLayer .leaflet-right {
+  right: max(10px, env(safe-area-inset-right, 0px));
+}
+
 /* Side panel overlay layer */
 .sidePanelLayer {
   position: absolute;

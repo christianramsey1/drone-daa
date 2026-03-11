@@ -206,6 +206,15 @@ export default function MapKitMap({
 
           mapRef.current = new mapkit.Map(elRef.current, mapOptions);
 
+          // Push built-in controls (compass, zoom, map type) below the notch/Dynamic Island
+          // Read CSS custom property set from env(safe-area-inset-top) via getComputedStyle workaround
+          const probe = document.createElement("div");
+          probe.style.cssText = "position:fixed;top:env(safe-area-inset-top,0px);left:0;width:0;height:0;visibility:hidden;";
+          document.body.appendChild(probe);
+          const safeTop = probe.offsetTop || 0;
+          document.body.removeChild(probe);
+          mapRef.current.padding = new mapkit.Padding(Math.max(safeTop, 10), 10, 10, 10);
+
           mapRef.current.addEventListener("error", (evt: any) => {
             console.error("[MapKit] map error event:", evt);
             setStatus(`map error: ${evt?.message || "unknown"}`);

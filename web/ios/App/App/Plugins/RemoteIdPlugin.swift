@@ -115,12 +115,13 @@ public class RemoteIdPlugin: CAPPlugin, CAPBridgedPlugin {
 
     fileprivate func beginScan() {
         guard scanning else { return }
-        // Scan for ALL peripherals (ODID uses service data, not advertised services list).
-        // allowDuplicates: true because RID broadcasts continuously with updated data.
-        centralManager?.scanForPeripherals(withServices: nil, options: [
+        // Scan with the ODID service UUID (0xFFFA) so iOS does active scanning.
+        // Also scan for nil separately to catch devices that don't list the UUID in their advertisement headers.
+        let odidUUID = RemoteIdPlugin.ODID_BLE_UUID
+        centralManager?.scanForPeripherals(withServices: [odidUUID], options: [
             CBCentralManagerScanOptionAllowDuplicatesKey: true,
         ])
-        print("[RID] BLE scanning started")
+        print("[RID] BLE scanning started (ODID UUID: \(odidUUID.uuidString))")
     }
 
     fileprivate func handleDiscovery(peripheral: CBPeripheral, advertisementData: [String: Any], rssi: NSNumber) {

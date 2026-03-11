@@ -1,14 +1,16 @@
 /**
  * GDL-90 Capacitor Plugin
  *
- * Receives GDL-90 ADS-B data over UDP from WiFi-connected receivers
- * (Stratux, ForeFlight Sentry, etc.) and exposes parsed snapshots to JS.
- * Ported from relay/gdl90.js — pure binary parsing per GDL-90 ICD.
+ * Receives GDL-90 ADS-B data over UDP broadcast from WiFi-connected receivers
+ * (skyAlert, Stratux, ForeFlight Sentry, etc.) and exposes parsed snapshots to JS.
+ *
+ * Uses BSD sockets (SO_BROADCAST + SO_REUSEPORT) instead of NWListener because
+ * NWListener cannot receive UDP broadcast packets on iOS.
  */
 
 import Foundation
 import Capacitor
-import Network
+import Darwin
 
 @objc(GDL90Plugin)
 public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
@@ -22,12 +24,11 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
 
     // MARK: - State
 
-    private var listener: NWListener?
-    private var connection: NWConnection?  // Direct UDP socket for broadcast reception
-    private var connections: [NWConnection] = []
+    private var sockFd: Int32 = -1
+    private var shouldReceive = false
     private let queue = DispatchQueue(label: "com.dronedaa.gdl90", qos: .userInitiated)
 
-    private var aircraftMap: [String: [String: Any]] = [:]     // ICAO hex -> track
+    private var aircraftMap: [String: [String: Any]] = [:]
     private var ownship: [String: Any]? = nil
     private var gpsValid = false
     private var lastUdpReceived: Date? = nil
@@ -54,92 +55,84 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func startListening(_ call: CAPPluginCall) {
         let port = call.getInt("port") ?? 4000
-
-        // Stop existing listener if any
         stopListenerInternal()
 
-        do {
-            let params = NWParameters.udp
-            params.allowLocalEndpointReuse = true
-            params.requiredInterfaceType = .wifi
+        // Create UDP socket
+        let fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+        guard fd >= 0 else {
+            call.reject("socket() failed: errno \(errno)")
+            return
+        }
 
-            let nwPort = NWEndpoint.Port(integerLiteral: UInt16(port))
+        // Allow multiple sockets on same port (in case of restart)
+        var one: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, socklen_t(MemoryLayout<Int32>.size))
+        setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one, socklen_t(MemoryLayout<Int32>.size))
+        // Enable receiving broadcast packets
+        setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &one, socklen_t(MemoryLayout<Int32>.size))
 
-            // Method 1: NWListener — handles directed UDP packets
-            listener = try NWListener(using: params, on: nwPort)
+        // Bind to INADDR_ANY:port — receives directed UDP, subnet broadcast, and 255.255.255.255
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = in_port_t(UInt16(port).bigEndian)
+        addr.sin_addr.s_addr = INADDR_ANY
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
 
-            listener?.newConnectionHandler = { [weak self] connection in
-                guard let self = self else { return }
-                print("[GDL90] New connection from: \(connection.endpoint)")
-                self.connections.append(connection)
-                self.receiveLoop(connection)
-                connection.start(queue: self.queue)
+        let bindResult = withUnsafeMutablePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
+        }
 
-            listener?.stateUpdateHandler = { [weak self] state in
-                switch state {
-                case .ready:
-                    print("[GDL90] UDP listener ready on port \(port) (WiFi only)")
-                case .failed(let error):
-                    print("[GDL90] Listener failed: \(error)")
-                    self?.stopListenerInternal()
-                default:
-                    break
+        guard bindResult == 0 else {
+            close(fd)
+            call.reject("bind() failed: errno \(errno)")
+            return
+        }
+
+        sockFd = fd
+        shouldReceive = true
+
+        print("[GDL90] BSD socket ready, listening on 0.0.0.0:\(port) (broadcast enabled)")
+
+        // Receive loop on a dedicated background thread
+        let capturedFd = fd
+        let thread = Thread { [weak self] in
+            guard let self = self else { return }
+            var buf = [UInt8](repeating: 0, count: 4096)
+            var senderAddr = sockaddr_in()
+            var senderLen = socklen_t(MemoryLayout<sockaddr_in>.size)
+
+            while self.shouldReceive {
+                let n = withUnsafeMutablePointer(to: &senderAddr) {
+                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                        recvfrom(capturedFd, &buf, buf.count, 0, $0, &senderLen)
+                    }
                 }
-            }
 
-            listener?.start(queue: queue)
-
-            // Method 2: NWConnectionGroup for multicast/broadcast reception
-            // GDL-90 devices often broadcast to 255.255.255.255 or the local subnet.
-            // NWListener may not receive these, so we also join a multicast group.
-            let groupParams = NWParameters.udp
-            groupParams.allowLocalEndpointReuse = true
-            groupParams.requiredInterfaceType = .wifi
-
-            // Create a group descriptor for the local port to receive broadcast UDP
-            if let multicast = try? NWMulticastGroup(for: [
-                .hostPort(host: "224.0.0.1", port: nwPort)
-            ]) {
-                let group = NWConnectionGroup(with: multicast, using: groupParams)
-                group.setReceiveHandler(maximumMessageSize: 4096, rejectOversizedMessages: false) {
-                    [weak self] message, content, isComplete in
-                    guard let self = self, let data = content else { return }
+                if n > 0 {
+                    let data = Data(buf[0..<n])
+                    let sender = String(cString: inet_ntoa(senderAddr.sin_addr))
+                    print("[GDL90] Received \(n) bytes from \(sender)")
                     self.queue.async {
                         self.lastUdpReceived = Date()
                         self.handleUdpData(data)
                     }
-                }
-                group.stateUpdateHandler = { state in
-                    print("[GDL90] Multicast group state: \(state)")
-                }
-                group.start(queue: queue)
-            }
-
-            // Method 3: Also try a direct connection to the AP gateway (192.168.4.1)
-            // listening for any UDP on our port
-            let directParams = NWParameters.udp
-            directParams.allowLocalEndpointReuse = true
-            directParams.requiredInterfaceType = .wifi
-            let directConn = NWConnection(
-                host: "192.168.4.1",
-                port: nwPort,
-                using: directParams
-            )
-            directConn.stateUpdateHandler = { [weak self] state in
-                print("[GDL90] Direct connection state: \(state)")
-                if state == .ready {
-                    self?.receiveLoop(directConn)
+                } else if n < 0 && errno != EINTR {
+                    if self.shouldReceive {
+                        print("[GDL90] recvfrom error: errno \(errno)")
+                    }
+                    break
                 }
             }
-            directConn.start(queue: queue)
-            self.connection = directConn
-
-            startPushTimer()
-            call.resolve(["started": true])
-        } catch {
-            call.reject("Failed to start UDP listener: \(error.localizedDescription)")
+            print("[GDL90] Receive thread exiting")
         }
+        thread.name = "com.dronedaa.gdl90.recv"
+        thread.qualityOfService = .userInitiated
+        thread.start()
+
+        startPushTimer()
+        call.resolve(["started": true])
     }
 
     @objc func stopListening(_ call: CAPPluginCall) {
@@ -150,55 +143,23 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
     @objc func getSnapshot(_ call: CAPPluginCall) {
         queue.async { [weak self] in
             guard let self = self else {
-                call.resolve(self?.emptySnapshot() ?? [:])
+                call.resolve([:])
                 return
             }
             self.pruneStale()
-            let snapshot = self.buildSnapshot()
-            call.resolve(snapshot)
+            call.resolve(self.buildSnapshot())
         }
     }
 
-    // MARK: - UDP Receive Loop
-
-    private func receiveLoop(_ connection: NWConnection) {
-        connection.receiveMessage { [weak self] data, _, _, error in
-            guard let self = self else { return }
-
-            if let data = data, !data.isEmpty {
-                self.lastUdpReceived = Date()
-                self.handleUdpData(data)
-            }
-
-            if let error = error {
-                print("[GDL90] Receive error: \(error)")
-                // Remove dead connection
-                self.queue.async {
-                    self.connections.removeAll { $0 === connection }
-                }
-                return
-            }
-
-            // If connection was cancelled, stop the loop
-            if connection.state == .cancelled {
-                return
-            }
-
-            // Continue receiving
-            self.receiveLoop(connection)
-        }
-    }
+    // MARK: - UDP Data Handler
 
     private func handleUdpData(_ data: Data) {
         let messages = unframe(data)
 
         for msg in messages {
-            let msgId = msg.msgId
-            let payload = msg.payload
-
-            switch msgId {
+            switch msg.msgId {
             case 0x14: // Traffic report
-                if let track = parseTrafficReport(payload) {
+                if let track = parseTrafficReport(msg.payload) {
                     let id = track["id"] as? String ?? ""
                     var t = track
                     t["timestamp"] = Date().timeIntervalSince1970 * 1000
@@ -206,7 +167,7 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
                 }
 
             case 0x0A: // Ownship report
-                if let track = parseTrafficReport(payload) {
+                if let track = parseTrafficReport(msg.payload) {
                     let lat = track["lat"] as? Double ?? 0
                     let lon = track["lon"] as? Double ?? 0
                     if isValidCoord(lat, lon) {
@@ -217,12 +178,12 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
                 }
 
             case 0x0B: // Ownship geo alt
-                if let geoAlt = parseOwnshipGeoAlt(payload) {
+                if let geoAlt = parseOwnshipGeoAlt(msg.payload) {
                     ownship?["geoAltFt"] = geoAlt["geoAltFt"]
                 }
 
             case 0x00: // Heartbeat
-                if let hb = parseHeartbeat(payload) {
+                if let hb = parseHeartbeat(msg.payload) {
                     gpsValid = hb["gpsValid"] as? Bool ?? false
                 }
 
@@ -241,8 +202,7 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
         timer.setEventHandler { [weak self] in
             guard let self = self else { return }
             self.pruneStale()
-            let snapshot = self.buildSnapshot()
-            self.notifyListeners("gdl90Update", data: snapshot)
+            self.notifyListeners("gdl90Update", data: self.buildSnapshot())
         }
         timer.resume()
         pushTimer = timer
@@ -252,9 +212,7 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
 
     private func pruneStale() {
         let cutoff = Date().timeIntervalSince1970 * 1000 - (staleTimeoutSec * 1000)
-        aircraftMap = aircraftMap.filter { (_, track) in
-            (track["timestamp"] as? Double ?? 0) > cutoff
-        }
+        aircraftMap = aircraftMap.filter { ($0.value["timestamp"] as? Double ?? 0) > cutoff }
     }
 
     private func buildSnapshot() -> [String: Any] {
@@ -264,7 +222,6 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
         } else {
             receiverConnected = false
         }
-
         return [
             "receiverConnected": receiverConnected,
             "gpsValid": gpsValid,
@@ -275,28 +232,15 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
         ]
     }
 
-    private func emptySnapshot() -> [String: Any] {
-        return [
-            "receiverConnected": false,
-            "gpsValid": false,
-            "ownship": NSNull(),
-            "aircraft": [] as [[String: Any]],
-            "count": 0,
-            "timestamp": Date().timeIntervalSince1970 * 1000,
-        ]
-    }
-
     private func stopListenerInternal() {
+        shouldReceive = false
+        if sockFd >= 0 {
+            // Closing the fd unblocks any pending recvfrom()
+            close(sockFd)
+            sockFd = -1
+        }
         pushTimer?.cancel()
         pushTimer = nil
-        connection?.cancel()
-        connection = nil
-        for conn in connections {
-            conn.cancel()
-        }
-        connections.removeAll()
-        listener?.cancel()
-        listener = nil
     }
 
     private func isValidCoord(_ lat: Double, _ lon: Double) -> Bool {
@@ -339,16 +283,13 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
         var i = 0
 
         while i < len {
-            // Find start flag 0x7E
             guard rawBytes[i] == 0x7E else { i += 1; continue }
-
-            // Find end flag
             var j = i + 1
             while j < len && rawBytes[j] != 0x7E { j += 1 }
             if j >= len { break }
 
             let frameLen = j - i - 1
-            if frameLen >= 3 { // min: msgId(1) + CRC(2)
+            if frameLen >= 3 {
                 let frame = rawBytes.subdata(in: (i + 1)..<j)
                 let payload = unstuff(frame)
 
@@ -358,17 +299,12 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
                     let crcCalc = crc16(Data(msgBody))
 
                     if crcCalc == crcReceived {
-                        messages.append(GDL90Message(
-                            msgId: msgBody[0],
-                            payload: Data(msgBody)
-                        ))
+                        messages.append(GDL90Message(msgId: msgBody[0], payload: Data(msgBody)))
                     }
                 }
             }
-
-            i = j // next frame starts at this 0x7E
+            i = j
         }
-
         return messages
     }
 
@@ -377,31 +313,25 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
     private func parseTrafficReport(_ payload: Data) -> [String: Any]? {
         guard payload.count >= 28 else { return nil }
 
-        // Bytes 2-4: ICAO address (big-endian)
         let address = (Int(payload[2]) << 16) | (Int(payload[3]) << 8) | Int(payload[4])
 
-        // Bytes 5-7: latitude (signed 24-bit)
         var latRaw = (Int(payload[5]) << 16) | (Int(payload[6]) << 8) | Int(payload[7])
         if latRaw & 0x800000 != 0 { latRaw -= 0x1000000 }
         let lat = Double(latRaw) * (180.0 / Double(1 << 23))
 
-        // Bytes 8-10: longitude (signed 24-bit)
         var lonRaw = (Int(payload[8]) << 16) | (Int(payload[9]) << 8) | Int(payload[10])
         if lonRaw & 0x800000 != 0 { lonRaw -= 0x1000000 }
         let lon = Double(lonRaw) * (180.0 / Double(1 << 23))
 
-        // Bytes 11-12: altitude (12 bits)
         let altRaw = (Int(payload[11]) << 4) | ((Int(payload[12]) >> 4) & 0x0F)
         let altFt: Any = altRaw == 0xFFF ? NSNull() : (altRaw * 25) - 1000
 
         let misc = Int(payload[12]) & 0x0F
         let airborne = (misc & 0x08) != 0
 
-        // Bytes 14-15: horizontal velocity (12 bits, knots)
         let hvelRaw = (Int(payload[14]) << 4) | ((Int(payload[15]) >> 4) & 0x0F)
         let speedKts: Any = hvelRaw == 0xFFF ? NSNull() : hvelRaw
 
-        // Bytes 15-16: vertical velocity (12 bits, signed, * 64 fpm)
         var vvelRaw = ((Int(payload[15]) & 0x0F) << 8) | Int(payload[16])
         var vertRateFpm: Any = NSNull()
         if vvelRaw != 0x800 {
@@ -409,13 +339,9 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
             vertRateFpm = vvelRaw * 64
         }
 
-        // Byte 17: track/heading
         let headingDeg = Double(payload[17]) * (360.0 / 256.0)
-
-        // Byte 18: emitter category
         let emitterCode = Int(payload[18])
 
-        // Bytes 19-26: callsign (8 ASCII bytes)
         var callsign = ""
         for k in 19..<min(27, payload.count) {
             let ch = payload[k]
@@ -425,10 +351,10 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
 
         return [
             "id": String(format: "%06X", address),
-            "lat": (Double(round(lat * 1e6)) / 1e6),
-            "lon": (Double(round(lon * 1e6)) / 1e6),
+            "lat": Double(round(lat * 1e6)) / 1e6,
+            "lon": Double(round(lon * 1e6)) / 1e6,
             "altFt": altFt,
-            "headingDeg": (Double(round(headingDeg * 10)) / 10),
+            "headingDeg": Double(round(headingDeg * 10)) / 10,
             "speedKts": speedKts,
             "vertRateFpm": vertRateFpm,
             "callsign": callsign.isEmpty ? NSNull() : callsign,
