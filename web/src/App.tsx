@@ -944,7 +944,9 @@ export default function App() {
 
   const sortedAircraft: AircraftWithDist[] = useMemo(() => {
     const center = resolvedCenter;
-    const list: AircraftWithDist[] = adsb.aircraft.map((ac) => {
+    const list: AircraftWithDist[] = adsb.aircraft
+      .filter((ac) => ac.lat !== 0 || ac.lon !== 0) // skip aircraft with no GPS fix
+      .map((ac) => {
       const d = center ? distanceNm(center, ac) : undefined;
       return {
         ...ac,
@@ -983,7 +985,9 @@ export default function App() {
 
   const sortedDrones: DroneWithDist[] = useMemo(() => {
     const center = resolvedCenter;
-    const list: DroneWithDist[] = rid.drones.map((d) => {
+    const list: DroneWithDist[] = rid.drones
+      .filter((d) => d.lat !== 0 || d.lon !== 0) // skip drones with no GPS fix
+      .map((d) => {
       const dist = center ? distanceNm(center, d) : undefined;
       const alert: AlertLevel = myDrones.has(d.id)
         ? "normal"
