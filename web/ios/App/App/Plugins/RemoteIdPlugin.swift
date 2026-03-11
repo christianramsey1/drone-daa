@@ -206,6 +206,13 @@ public class RemoteIdPlugin: CAPPlugin, CAPBridgedPlugin {
             }
         }
 
+        // If we resolved a serial number, migrate any existing entry that was keyed by
+        // the peripheral UUID (from an earlier advertisement without Basic ID).
+        if droneId != peripheralId, let orphan = droneMap[peripheralId] {
+            droneMap[droneId] = orphan
+            droneMap.removeValue(forKey: peripheralId)
+        }
+
         // Accumulate messages for this drone
         var entry = droneMap[droneId] ?? DroneEntry(peripheralId: peripheralId)
         for msg in parsedMessages {
