@@ -57,6 +57,9 @@ public class RemoteIdPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private var droneMap: [String: DroneEntry] = [:]
+    // Maps Bluetooth peripheral UUID → known serial number so every advertisement
+    // from the same peripheral uses a stable key, even when Basic ID is absent.
+    private var peripheralToSerial: [String: String] = [:]
     private let queue = DispatchQueue(label: "com.dronedaa.rid", qos: .userInitiated)
     private var pushTimer: DispatchSourceTimer?
 
@@ -95,6 +98,8 @@ public class RemoteIdPlugin: CAPPlugin, CAPBridgedPlugin {
             self.centralManager?.stopScan()
             self.pushTimer?.cancel()
             self.pushTimer = nil
+            self.droneMap.removeAll()
+            self.peripheralToSerial.removeAll()
             call.resolve()
         }
     }
@@ -196,21 +201,25 @@ public class RemoteIdPlugin: CAPPlugin, CAPBridgedPlugin {
 
         guard !parsedMessages.isEmpty else { return }
 
-        // Determine drone ID: prefer serial number from Basic ID, fall back to peripheral UUID
-        var droneId = peripheralId
+        // Resolve stable drone ID:
+        // 1. Use known mapping for this peripheral (already seen Basic ID before)
+        // 2. Look for Basic ID in this batch of messages
+        // 3. Fall back to peripheral UUID
+        var droneId = peripheralToSerial[peripheralId] ?? peripheralId
         for msg in parsedMessages {
             if (msg["msgType"] as? UInt8) == RemoteIdPlugin.MSG_BASIC_ID,
                let uaId = msg["uaId"] as? String, !uaId.isEmpty {
+                if peripheralToSerial[peripheralId] == nil {
+                    // First time seeing this serial — record mapping and migrate orphan entry
+                    peripheralToSerial[peripheralId] = uaId
+                    if let orphan = droneMap[peripheralId] {
+                        droneMap[uaId] = orphan
+                        droneMap.removeValue(forKey: peripheralId)
+                    }
+                }
                 droneId = uaId
                 break
             }
-        }
-
-        // If we resolved a serial number, migrate any existing entry that was keyed by
-        // the peripheral UUID (from an earlier advertisement without Basic ID).
-        if droneId != peripheralId, let orphan = droneMap[peripheralId] {
-            droneMap[droneId] = orphan
-            droneMap.removeValue(forKey: peripheralId)
         }
 
         // Accumulate messages for this drone
@@ -250,7 +259,10 @@ public class RemoteIdPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func pruneStale() {
         let cutoff = Date().addingTimeInterval(-staleTimeoutSec)
+        let removedIds = Set(droneMap.filter { $0.value.lastSeen <= cutoff }.keys)
         droneMap = droneMap.filter { $0.value.lastSeen > cutoff }
+        // Remove peripheral mappings for stale drones so they don't linger
+        peripheralToSerial = peripheralToSerial.filter { !removedIds.contains($0.value) }
     }
 
     private func buildSnapshot() -> [String: Any] {
