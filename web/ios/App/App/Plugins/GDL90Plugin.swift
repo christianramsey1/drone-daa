@@ -79,11 +79,11 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
         addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
 
         // Retry bind up to 5 times (another app may hold the port briefly)
-        var bindResult = -1
+        var bindResult: Int32 = -1
         for attempt in 1...5 {
-            bindResult = withUnsafeMutablePointer(to: &addr) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            bindResult = withUnsafeMutablePointer(to: &addr) { addrPtr -> Int32 in
+                addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { saPtr -> Int32 in
+                    bind(fd, saPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
                 }
             }
             if bindResult == 0 {
@@ -96,7 +96,7 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
 
         guard bindResult == 0 else {
             close(fd)
-            call.reject("bind() failed after 5 attempts: errno \(errno). Another app (ForeFlight?) may own port \(port).")
+            call.reject("bind() failed after 5 attempts: errno \(errno). Another app may own port \(port).")
             return
         }
 
