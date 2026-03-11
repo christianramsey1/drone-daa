@@ -1,6 +1,6 @@
 // web/src/App.tsx — DroneDAA
 import "./App.css";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import MapKitMap, { type Annotation, type Polyline } from "./MapKitMap";
 import { getApiBaseUrl, isNative } from "./platform";
 import { useAdsb, type AdsbConnectionStatus } from "./services/useAdsb";
@@ -15,6 +15,8 @@ import { broadcastTypeLabel } from "./services/remoteId";
 import { ConnectionWizard } from "./ConnectionWizard";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { useSkyAlert, type SkyAlertSettings } from "./services/useSkyAlert";
+import { useAuth } from "./auth/AuthContext";
+import { AppleSignInButton } from "./auth/AppleSignInButton";
 
 const LeafletMap = lazy(() => import("./LeafletMap"));
 
@@ -594,83 +596,95 @@ function DroneCard({ drone, distNm, alertLevel, isMyDrone, nickname }: {
 
 // ── Component ──────────────────────────────────────────────────────────
 
-// ── Access Gate (temporary) ─────────────────────────────────────────
-const ACCESS_CODE = "051474";
-const ACCESS_KEY = "dronedaa.access";
-
-function useAccessGate(): [boolean, (code: string) => boolean] {
-  const [granted, setGranted] = useState(
-    () => sessionStorage.getItem(ACCESS_KEY) === "1",
-  );
-  const tryCode = useCallback((code: string): boolean => {
-    if (code === ACCESS_CODE) {
-      sessionStorage.setItem(ACCESS_KEY, "1");
-      setGranted(true);
-      return true;
-    }
-    return false;
-  }, []);
-  return [granted, tryCode];
-}
-
-function AccessGate({ onSubmit }: { onSubmit: (code: string) => boolean }) {
-  const [code, setCode] = useState("");
-  const [error, setError] = useState(false);
+// ── Sign In Screen ───────────────────────────────────────────────────
+function SignInScreen() {
+  const { loading, error, isAppleSignInReady } = useAuth();
   return (
     <div style={{
       display: "flex", alignItems: "center", justifyContent: "center",
       height: "100dvh", width: "100vw",
-      background: "#0d0d0d", color: "#fff", fontFamily: "system-ui, sans-serif",
+      background: "#0a0a0c", color: "#fff",
+      fontFamily: "system-ui, -apple-system, sans-serif",
+      padding: "env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)",
+      boxSizing: "border-box",
     }}>
       <div style={{
         display: "flex", flexDirection: "column", alignItems: "center",
-        gap: 16, padding: 32, maxWidth: 320,
+        gap: 0, padding: "0 32px", maxWidth: 360, width: "100%",
       }}>
-        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 1 }}>DroneDAA</div>
-        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>
-          Enter access code to continue
+        {/* App icon / logo */}
+        <div style={{
+          width: 72, height: 72, borderRadius: 18,
+          background: "linear-gradient(135deg, #00d1ff22 0%, #0057ff22 100%)",
+          border: "1.5px solid rgba(0,209,255,0.3)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 36, marginBottom: 20,
+        }}>
+          ✈️
         </div>
-        <input
-          type="text"
-          inputMode="numeric"
-          autoFocus
-          value={code}
-          onChange={(e) => { setCode(e.target.value); setError(false); }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              if (!onSubmit(code)) setError(true);
-            }
-          }}
-          style={{
-            width: "100%", padding: "10px 14px", fontSize: 18,
-            textAlign: "center", letterSpacing: 6,
-            background: "rgba(255,255,255,0.06)",
-            border: error ? "1px solid #ff453a" : "1px solid rgba(255,255,255,0.15)",
-            borderRadius: 8, color: "#fff", outline: "none",
-          }}
-          placeholder="------"
-        />
+
+        {/* App name */}
+        <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: -0.5, marginBottom: 8 }}>
+          DroneDAA
+        </div>
+
+        {/* Tagline */}
+        <div style={{ fontSize: 15, color: "rgba(255,255,255,0.55)", marginBottom: 32, textAlign: "center", lineHeight: 1.5 }}>
+          Detect and Avoid
+        </div>
+
+        {/* Description */}
+        <div style={{
+          fontSize: 14, color: "rgba(255,255,255,0.65)", lineHeight: 1.65,
+          textAlign: "left", marginBottom: 36, width: "100%",
+          display: "flex", flexDirection: "column", gap: 12,
+        }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <span style={{ fontSize: 20, flexShrink: 0 }}>📡</span>
+            <span><strong style={{ color: "rgba(255,255,255,0.88)" }}>Live ADS-B traffic</strong> — see manned aircraft near your drone in real time via your GDL-90 receiver.</span>
+          </div>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <span style={{ fontSize: 20, flexShrink: 0 }}>🔵</span>
+            <span><strong style={{ color: "rgba(255,255,255,0.88)" }}>Remote ID scanning</strong> — detect nearby drones broadcasting FAA Remote ID over Bluetooth.</span>
+          </div>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <span style={{ fontSize: 20, flexShrink: 0 }}>⚠️</span>
+            <span><strong style={{ color: "rgba(255,255,255,0.88)" }}>Proximity alerts</strong> — configurable warning and caution rings with haptic and audio alerts.</span>
+          </div>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <span style={{ fontSize: 20, flexShrink: 0 }}>🗺️</span>
+            <span><strong style={{ color: "rgba(255,255,255,0.88)" }}>Offline topo maps</strong> — download map tiles for field use without internet access.</span>
+          </div>
+        </div>
+
+        {/* Sign In button */}
+        <div style={{ width: "100%" }}>
+          <AppleSignInButton size="large" variant="white" onSuccess={() => {}} />
+        </div>
+
         {error && (
-          <div style={{ fontSize: 12, color: "#ff453a" }}>Invalid code</div>
+          <div style={{ marginTop: 14, fontSize: 13, color: "#ff453a", textAlign: "center" }}>
+            {error}
+          </div>
         )}
-        <button
-          onClick={() => { if (!onSubmit(code)) setError(true); }}
-          style={{
-            width: "100%", padding: "10px 0", fontSize: 14, fontWeight: 600,
-            background: "rgba(0, 209, 255, 0.15)", color: "#00d1ff",
-            border: "1px solid rgba(0, 209, 255, 0.3)", borderRadius: 8,
-            cursor: "pointer",
-          }}
-        >
-          Enter
-        </button>
+
+        {!isAppleSignInReady && !loading && (
+          <div style={{ marginTop: 14, fontSize: 12, color: "rgba(255,255,255,0.35)", textAlign: "center" }}>
+            Initializing Sign in with Apple…
+          </div>
+        )}
+
+        {/* Privacy note */}
+        <div style={{ marginTop: 24, fontSize: 11, color: "rgba(255,255,255,0.28)", textAlign: "center", lineHeight: 1.5 }}>
+          Your Apple ID is used only to identify your account. We never see your password.
+        </div>
       </div>
     </div>
   );
 }
 
 export default function App() {
-  const [accessGranted, tryAccessCode] = useAccessGate();
+  const { isAuthenticated, loading: authLoading } = useAuth();
 
   // Panel state
   const [panelOpen, setPanelOpen] = useState(true);
@@ -1325,7 +1339,8 @@ export default function App() {
 
   // ── Render ──────────────────────────────────────────────────────
 
-  if (!accessGranted) return <AccessGate onSubmit={tryAccessCode} />;
+  if (authLoading) return null; // brief flash while localStorage is read
+  if (!isAuthenticated) return <SignInScreen />;
 
   return (
     <div className="appShell">
