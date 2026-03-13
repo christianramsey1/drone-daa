@@ -97,8 +97,54 @@ try {
 // Serves the web app on http://localhost:4001 so the browser can connect
 // WebSocket on the same origin without mixed-content blocking.
 
+const SKYALERT_HOST = "192.168.4.1";
+
 const server = http.createServer((req, res) => {
-  // Proxy everything to detectandavoid.com over HTTPS
+  // ── skyAlert proxy: /skyalert/* → http://192.168.4.1/* ──────────────
+  if (req.url.startsWith("/skyalert")) {
+    const targetPath = req.url.replace(/^\/skyalert/, "") || "/";
+    const proxyOpts = {
+      hostname: SKYALERT_HOST,
+      port: 80,
+      path: targetPath,
+      method: req.method,
+      headers: { ...req.headers, host: SKYALERT_HOST },
+      timeout: 4000,
+    };
+
+    const skyReq = http.request(proxyOpts, (skyRes) => {
+      // Allow CORS from any origin so browser doesn't block
+      res.writeHead(skyRes.statusCode, {
+        ...skyRes.headers,
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-headers": "content-type",
+      });
+      skyRes.pipe(res);
+    });
+
+    skyReq.on("timeout", () => { skyReq.destroy(); res.writeHead(504); res.end(); });
+    skyReq.on("error", (err) => {
+      console.error(`[relay] skyAlert proxy error: ${err.message}`);
+      res.writeHead(502);
+      res.end("skyAlert unreachable");
+    });
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-headers": "content-type",
+      });
+      res.end();
+      return;
+    }
+
+    req.pipe(skyReq);
+    return;
+  }
+
+  // Proxy everything else to detectandavoid.com over HTTPS
   const proxyOpts = {
     hostname: UPSTREAM,
     port: 443,

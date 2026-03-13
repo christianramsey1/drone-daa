@@ -12,7 +12,12 @@ const PROBE_INTERVAL_MS = 15_000;
 const FETCH_TIMEOUT_MS = 3_000;
 
 function base(): string {
-  return isNative() ? DIRECT_BASE : PROXY_BASE;
+  if (isNative()) return DIRECT_BASE;
+  // When served by the relay (port 4001), use the relay's skyAlert proxy
+  const port = window.location.port;
+  if (port === "4001") return `http://${window.location.host}/skyalert`;
+  // Vite dev or production — relative path
+  return PROXY_BASE;
 }
 
 // ── Types matching the skyAlert JSON API ──
