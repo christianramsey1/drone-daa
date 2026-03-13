@@ -13,11 +13,15 @@ const FETCH_TIMEOUT_MS = 3_000;
 
 function base(): string {
   if (isNative()) return DIRECT_BASE;
-  // When served by the relay (port 4001), use the relay's skyAlert proxy
+  const host = window.location.hostname;
   const port = window.location.port;
-  if (port === "4001") return `http://${window.location.host}/skyalert`;
-  // Vite dev or production — relative path
-  return PROXY_BASE;
+  const isLocalhost = host === "localhost" || host === "127.0.0.1";
+  // When served by the relay (port 4001), use the relay's skyAlert proxy
+  if (isLocalhost && port === "4001") return `http://${window.location.host}/skyalert`;
+  // Dev mode — Vite proxies /skyalert → relay
+  if (isLocalhost) return PROXY_BASE;
+  // Production (detectandavoid.com) — route through local relay proxy
+  return "http://127.0.0.1:4001/skyalert";
 }
 
 // ── Types matching the skyAlert JSON API ──
