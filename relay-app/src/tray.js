@@ -51,8 +51,9 @@ function rebuildMenu(statusText) {
     enabled: false,
   }));
 
+  const version = app.getVersion();
   const menu = Menu.buildFromTemplate([
-    { label: "DroneDAA Relay", enabled: false },
+    { label: `DroneDAA Relay  v${version}`, enabled: false },
     { type: "separator" },
     ...statusLines,
     { type: "separator" },
