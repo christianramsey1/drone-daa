@@ -180,26 +180,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Send to backend for verification
       const apiBase = getApiBaseUrl();
-      const backendResponse = await fetch(`${apiBase}/api/auth/apple`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          identityToken: response.response.identityToken,
-          user: response.response.givenName || response.response.familyName
-            ? {
-                name: {
-                  firstName: response.response.givenName,
-                  lastName: response.response.familyName,
-                },
-                email: response.response.email,
-              }
-            : undefined,
-        }),
-      });
+      const authController = new AbortController();
+      const authTimeout = setTimeout(() => authController.abort(), 15_000);
+      let backendResponse: Response;
+      try {
+        backendResponse = await fetch(`${apiBase}/api/auth/apple`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: authController.signal,
+          body: JSON.stringify({
+            identityToken: response.response.identityToken,
+            user: response.response.givenName || response.response.familyName
+              ? {
+                  name: {
+                    firstName: response.response.givenName,
+                    lastName: response.response.familyName,
+                  },
+                  email: response.response.email,
+                }
+              : undefined,
+          }),
+        });
+      } finally {
+        clearTimeout(authTimeout);
+      }
 
-      const data = await backendResponse.json();
+      let data: any;
+      try {
+        data = await backendResponse.json();
+      } catch {
+        throw new Error(`Server error (${backendResponse.status}). Please try again.`);
+      }
 
       if (!backendResponse.ok || !data.ok) {
         throw new Error(data.error || "Authentication failed");
@@ -251,18 +262,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log("[Auth] Web Apple Sign In successful");
 
       // Send to backend for verification
-      const backendResponse = await fetch(`${getApiBaseUrl()}/api/auth/apple`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          identityToken: response.authorization.id_token,
-          user: response.user,
-        }),
-      });
+      const webAuthController = new AbortController();
+      const webAuthTimeout = setTimeout(() => webAuthController.abort(), 15_000);
+      let backendResponse: Response;
+      try {
+        backendResponse = await fetch(`${getApiBaseUrl()}/api/auth/apple`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: webAuthController.signal,
+          body: JSON.stringify({
+            identityToken: response.authorization.id_token,
+            user: response.user,
+          }),
+        });
+      } finally {
+        clearTimeout(webAuthTimeout);
+      }
 
-      const data = await backendResponse.json();
+      let data: any;
+      try {
+        data = await backendResponse.json();
+      } catch {
+        throw new Error(`Server error (${backendResponse.status}). Please try again.`);
+      }
 
       if (!backendResponse.ok || !data.ok) {
         throw new Error(data.error || "Authentication failed");

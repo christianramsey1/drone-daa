@@ -9,9 +9,13 @@
 const fs = require("fs");
 const path = require("path");
 
-const TEAM_ID = process.env.APPLE_TEAM_ID || "WNS326Z3DK";
-const KEY_ID = process.env.MAPKIT_KEY_ID || "6W7H25SW4U";
-const SERVICE_ID = process.env.WEATHERKIT_SERVICE_ID || "com.dronedaa.web";
+const TEAM_ID = process.env.APPLE_TEAM_ID;
+const KEY_ID = process.env.MAPKIT_KEY_ID;
+const SERVICE_ID = process.env.WEATHERKIT_SERVICE_ID;
+
+if (!TEAM_ID || !KEY_ID || !SERVICE_ID) {
+  console.error("[WeatherKit] Missing required env vars: APPLE_TEAM_ID, MAPKIT_KEY_ID, WEATHERKIT_SERVICE_ID");
+}
 
 // Key path
 const P8_PATH = path.join(

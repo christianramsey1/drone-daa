@@ -16,7 +16,9 @@ const VALID_CATEGORIES = ["restaurant", "marina", "fuel", "rental", "service", "
 
 module.exports = async (req, res) => {
   // CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const origin = req.headers.origin || "";
+  const allowed = ["https://detectandavoid.com", "capacitor://localhost", "http://localhost:5173", "http://localhost:4001"];
+  res.setHeader("Access-Control-Allow-Origin", allowed.includes(origin) ? origin : allowed[0]);
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 

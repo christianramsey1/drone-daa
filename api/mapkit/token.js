@@ -2,11 +2,13 @@
 const fs = require("fs");
 const path = require("path");
 
-const TEAM_ID = process.env.APPLE_TEAM_ID || "WNS326Z3DK";
-const KEY_ID = process.env.MAPKIT_KEY_ID || "6W7H25SW4U";
+const TEAM_ID = process.env.APPLE_TEAM_ID;
+const KEY_ID = process.env.MAPKIT_KEY_ID;
+const MAPS_ID = process.env.MAPKIT_MAPS_ID;
 
-// Maps ID registered in Apple Developer → Certificates, Identifiers → Maps IDs
-const MAPS_ID = process.env.MAPKIT_MAPS_ID || `${TEAM_ID}.maps.com.dronedaa.web`;
+if (!TEAM_ID || !KEY_ID || !MAPS_ID) {
+  console.error("[MapKit Token] Missing required env vars: APPLE_TEAM_ID, MAPKIT_KEY_ID, MAPKIT_MAPS_ID");
+}
 
 // Local dev: read from file. Production: read from env var.
 const P8_PATH = path.join(

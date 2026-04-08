@@ -36,6 +36,7 @@ const {
   purchaseExists,
   createPurchase,
 } = require("../../shared/db");
+const { checkRateLimit } = require("../../shared/ratelimit");
 
 // Apple's StoreKit 2 JWS signing keys endpoint
 const APPLE_ROOT_CA_URL = "https://www.apple.com/certificateauthority/AppleRootCA-G3.cer";
@@ -73,25 +74,103 @@ function decodeSignedTransaction(signedTransaction) {
 }
 
 /**
- * Verify the signed transaction signature (optional, enhanced security).
- * For full production security, implement Apple certificate chain verification.
+ * Apple's root CA certificates for StoreKit 2 JWS verification.
+ * These are the DER-encoded (base64) Apple Root CA - G3 certificates.
+ * Apple signs StoreKit transactions with certs chaining to these roots.
+ */
+const APPLE_ROOT_CA_G3_BASE64 =
+  "MIICQzCCAcmgAwIBAgIILcX8iNLFS5UwCgYIKoZIzj0EAwMwZzEbMBkGA1UEAwwS" +
+  "QXBwbGUgUm9vdCBDQSAtIEczMSYwJAYDVQQLDB1BcHBsZSBDZXJ0aWZpY2F0aW9u" +
+  "IEF1dGhvcml0eTETMBEGA1UECgwKQXBwbGUgSW5jLjELMAkGA1UEBhMCVVMwHhcN" +
+  "MTQwNDMwMTgxOTA2WhcNMzkwNDMwMTgxOTA2WjBnMRswGQYDVQQDDBJBcHBsZSBS" +
+  "b290IENBIC0gRzMxJjAkBgNVBAsMHUFwcGxlIENlcnRpZmljYXRpb24gQXV0aG9y" +
+  "aXR5MRMwEQYDVQQKDApBcHBsZSBJbmMuMQswCQYDVQQGEwJVUzB2MBAGByqGSM49" +
+  "AgEGBSuBBAAiA2IABJjpLz1AcqTtkyJygRMc3RCV8cWjTnHcFBbZDuWmBSp3ZHtf" +
+  "TjjTuxxEtX/1H7YyYl3J6YRbTzBPEVoA/VhYDKX1DyQ2YGQWnl/YBnXIsi/wNPt" +
+  "FoL8gE5t3mCN5PeqMoRjkaNjMGEwHQYDVR0OBBYEFLuw3qFYM4iapIqZ3BUmprrJ" +
+  "kfmmMB8GA1UdIwQYMBaAFLuw3qFYM4iapIqZ3BUmprrJkfmmMA8GA1UdEwEB/wQF" +
+  "MAMBAf8wDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2gAMGUCMQCD6cHEFl4a" +
+  "XTQYa+1LV/GiTkPnTHhLg4UB/kqOhxSBhsN6sCqLtISaTNLpKGCkSMCMFsG5Fxk" +
+  "dLdQR7EQHI2grBXl2PYnRqKDbLJ9RWqTV7SZkfCOgFl5Ypj2Vp+YUQ==";
+
+/**
+ * Verify the signed transaction JWS signature against Apple's certificate chain.
+ * 1. Extracts x5c chain from JWS header
+ * 2. Verifies the leaf certificate chains to Apple Root CA - G3
+ * 3. Verifies the JWS signature with the leaf certificate
+ * 4. Validates bundle ID
  */
 async function verifyTransactionSignature(signedTransaction) {
-  // For MVP, we trust the transaction came from StoreKit on the device.
-  // In production, you should:
-  // 1. Fetch Apple's root certificate
-  // 2. Verify the JWS signature chain
-  // 3. Check certificate validity
-  //
-  // The transaction is already validated by StoreKit on the device,
-  // and our session token ensures the request came from our app.
+  const { jwtVerify, importX509 } = jose;
+  const crypto = require("crypto");
 
-  return true;
+  const parts = signedTransaction.split(".");
+  if (parts.length !== 3) throw new Error("Invalid JWS format");
+
+  // Decode header to get x5c chain
+  const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
+  const x5c = header.x5c;
+  if (!Array.isArray(x5c) || x5c.length < 2) {
+    throw new Error("Missing or incomplete x5c certificate chain in JWS header (need leaf + intermediate)");
+  }
+
+  // Validate certificate chain: leaf → intermediate → Apple Root CA G3
+  // The last cert in x5c should be signed by Apple's root
+  const rootDer = Buffer.from(APPLE_ROOT_CA_G3_BASE64, "base64");
+  const rootCert = new crypto.X509Certificate(rootDer);
+
+  // Walk the chain from the end (closest to root) backward
+  const certs = x5c.map((b64) => new crypto.X509Certificate(Buffer.from(b64, "base64")));
+
+  // Verify the top of the chain is issued by Apple's root CA
+  const topCert = certs[certs.length - 1];
+  if (!topCert.verify(rootCert.publicKey)) {
+    throw new Error("Certificate chain does not trace to Apple Root CA - G3");
+  }
+
+  // Verify each cert in the chain is signed by its parent
+  for (let i = 0; i < certs.length - 1; i++) {
+    if (!certs[i].verify(certs[i + 1].publicKey)) {
+      throw new Error(`Certificate chain broken at position ${i}`);
+    }
+  }
+
+  // Check leaf certificate validity period
+  const leaf = certs[0];
+  const now = new Date();
+  if (now < new Date(leaf.validFrom) || now > new Date(leaf.validTo)) {
+    throw new Error("Leaf certificate has expired or is not yet valid");
+  }
+
+  // Convert leaf certificate to PEM for jose
+  const leafPem = `-----BEGIN CERTIFICATE-----\n${x5c[0]}\n-----END CERTIFICATE-----`;
+  const key = await importX509(leafPem, header.alg || "ES256");
+
+  // Verify JWS signature
+  const { payload } = await jwtVerify(signedTransaction, key, {
+    algorithms: [header.alg || "ES256"],
+  });
+
+  // Validate bundle ID matches our app
+  if (payload.bundleId && payload.bundleId !== "com.dronedaa.app") {
+    throw new Error(`Bundle ID mismatch: ${payload.bundleId}`);
+  }
+
+  return payload;
 }
 
+const ALLOWED_ORIGINS = [
+  "https://detectandavoid.com",
+  "capacitor://localhost",
+  "http://localhost:5173",
+  "http://localhost:4001",
+];
+
 module.exports = async (req, res) => {
-  // CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // CORS headers — restrict to known origins
+  const origin = req.headers.origin || "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
@@ -101,6 +180,13 @@ module.exports = async (req, res) => {
 
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
+  }
+
+  // Rate limit: 10 attempts per minute per IP
+  const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
+  const { limited } = checkRateLimit(ip, "purchase", 10, 60_000);
+  if (limited) {
+    return res.status(429).json({ ok: false, error: "Too many requests. Try again in a minute." });
   }
 
   try {

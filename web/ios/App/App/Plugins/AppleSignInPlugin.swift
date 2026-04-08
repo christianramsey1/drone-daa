@@ -95,9 +95,19 @@ private class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate, 
     }
 
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first
-        return scene?.windows.first { $0.isKeyWindow } ?? scene?.windows.first ?? UIWindow()
+        // Find the key window from any connected window scene
+        for scene in UIApplication.shared.connectedScenes {
+            if let ws = scene as? UIWindowScene,
+               let keyWindow = ws.windows.first(where: { $0.isKeyWindow }) {
+                return keyWindow
+            }
+        }
+        // Fallback: first window of first scene
+        if let ws = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = ws.windows.first {
+            return window
+        }
+        // Last resort — should never reach here in a running app
+        return UIWindow()
     }
 }

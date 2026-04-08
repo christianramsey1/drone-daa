@@ -1,5 +1,1 @@
-/**
- * Paywall Module
- *
- * Placeholder for future premium feature paywalls.
- */
+export { ProPaywall } from "./ProPaywall";

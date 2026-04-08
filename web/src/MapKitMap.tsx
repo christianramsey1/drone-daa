@@ -121,11 +121,17 @@ function loadMapKit(): Promise<any> {
 }
 
 async function fetchToken(): Promise<string> {
-  const r = await fetch(`${getApiBaseUrl()}/api/mapkit/token`, { cache: "no-store" });
-  const t = await r.text();
-  if (!r.ok) throw new Error(`token endpoint failed ${r.status}: ${t}`);
-  if (!t || t.length < 50) throw new Error(`token looks wrong: "${t}"`);
-  return t.trim();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const r = await fetch(`${getApiBaseUrl()}/api/mapkit/token`, { cache: "no-store", signal: controller.signal });
+    const t = await r.text();
+    if (!r.ok) throw new Error(`token endpoint failed ${r.status}: ${t}`);
+    if (!t || t.length < 50) throw new Error(`token looks wrong: "${t}"`);
+    return t.trim();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export default function MapKitMap({
@@ -229,7 +235,9 @@ export default function MapKitMap({
               const dLat = r.span.latitudeDelta / 2;
               const dLon = r.span.longitudeDelta / 2;
               // Approximate zoom from span
-              const zoom = Math.round(Math.log2(360 / r.span.longitudeDelta));
+              const zoom = r.span.longitudeDelta > 0
+                ? Math.round(Math.log2(360 / r.span.longitudeDelta))
+                : 20;
               onViewChange(zoom, {
                 south: lat - dLat,
                 north: lat + dLat,

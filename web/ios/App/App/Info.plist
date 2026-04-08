@@ -30,7 +30,7 @@
 	<string>Main</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
@@ -55,11 +55,9 @@
 	<false/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>DroneDAA uses Bluetooth to detect nearby drones broadcasting Remote ID signals for airspace awareness.</string>
-	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>DroneDAA uses Bluetooth to detect nearby drones broadcasting Remote ID signals for airspace awareness.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>DroneDAA receives ADS-B flight data from your local ADS-B receiver over the local network.</string>
-	<key>NSBonjourServices</key>
+	<key>NSBonjourServiceTypes</key>
 	<array>
 		<string>_gdl90._udp</string>
 	</array>

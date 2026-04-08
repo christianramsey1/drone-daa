@@ -17,6 +17,8 @@ import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { useSkyAlert, type SkyAlertSettings } from "./services/useSkyAlert";
 import { useAuth } from "./auth/AuthContext";
 import { AppleSignInButton } from "./auth/AppleSignInButton";
+import { useEntitlements } from "./entitlements";
+import { ProPaywall } from "./paywall";
 
 const LeafletMap = lazy(() => import("./LeafletMap"));
 
@@ -612,15 +614,80 @@ function SignInScreen() {
         display: "flex", flexDirection: "column", alignItems: "center",
         gap: 0, padding: "0 32px", maxWidth: 360, width: "100%",
       }}>
-        {/* App icon / logo */}
+        {/* Radar scope icon */}
         <div style={{
-          width: 72, height: 72, borderRadius: 18,
-          background: "linear-gradient(135deg, #00d1ff22 0%, #0057ff22 100%)",
-          border: "1.5px solid rgba(0,209,255,0.3)",
+          width: 88, height: 88, borderRadius: 18,
+          background: "radial-gradient(circle, #001a0e 0%, #000d07 100%)",
+          border: "1.5px solid rgba(0,255,100,0.25)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 36, marginBottom: 20,
+          marginBottom: 20, overflow: "hidden", position: "relative",
+          boxShadow: "0 0 24px rgba(0,255,100,0.12)",
         }}>
-          ✈️
+          <svg width="72" height="72" viewBox="0 0 72 72" style={{ display: "block" }}>
+            <defs>
+              {/* Sweep gradient — green arc fading behind the sweep arm */}
+              <radialGradient id="radarBg" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#001a0e" />
+                <stop offset="100%" stopColor="#000d07" />
+              </radialGradient>
+              <linearGradient id="sweepFade" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#00ff64" stopOpacity="0.35" />
+                <stop offset="100%" stopColor="#00ff64" stopOpacity="0" />
+              </linearGradient>
+              <clipPath id="radarCircle">
+                <circle cx="36" cy="36" r="32" />
+              </clipPath>
+              <style>{`
+                @keyframes radarSweep {
+                  from { transform: rotate(0deg); }
+                  to   { transform: rotate(360deg); }
+                }
+                @keyframes blip1 {
+                  0%,60%,100% { opacity: 0; }
+                  65%,90%     { opacity: 1; }
+                }
+                @keyframes blip2 {
+                  0%,25%,100% { opacity: 0; }
+                  30%,55%     { opacity: 1; }
+                }
+                .radar-sweep {
+                  transform-origin: 36px 36px;
+                  animation: radarSweep 3s linear infinite;
+                }
+              `}</style>
+            </defs>
+
+            {/* Dark background circle */}
+            <circle cx="36" cy="36" r="32" fill="url(#radarBg)" />
+
+            {/* Concentric rings */}
+            <circle cx="36" cy="36" r="10" fill="none" stroke="#00ff64" strokeWidth="0.5" strokeOpacity="0.25" />
+            <circle cx="36" cy="36" r="20" fill="none" stroke="#00ff64" strokeWidth="0.5" strokeOpacity="0.2" />
+            <circle cx="36" cy="36" r="30" fill="none" stroke="#00ff64" strokeWidth="0.5" strokeOpacity="0.15" />
+
+            {/* Crosshairs */}
+            <line x1="4" y1="36" x2="68" y2="36" stroke="#00ff64" strokeWidth="0.4" strokeOpacity="0.15" />
+            <line x1="36" y1="4" x2="36" y2="68" stroke="#00ff64" strokeWidth="0.4" strokeOpacity="0.15" />
+
+            {/* Sweep group (rotates) */}
+            <g className="radar-sweep" clipPath="url(#radarCircle)">
+              {/* Sweep wedge */}
+              <path
+                d="M36,36 L36,4 A32,32 0 0,1 60,12 Z"
+                fill="#00ff64"
+                fillOpacity="0.18"
+              />
+              {/* Sweep arm */}
+              <line x1="36" y1="36" x2="36" y2="4" stroke="#00ff64" strokeWidth="1.2" strokeOpacity="0.85" />
+            </g>
+
+            {/* Blips (static, revealed by sweep passing) */}
+            <circle cx="50" cy="24" r="2" fill="#00ff64" style={{ animation: "blip1 3s linear infinite" }} />
+            <circle cx="24" cy="46" r="1.5" fill="#00ff64" style={{ animation: "blip2 3s linear infinite" }} />
+
+            {/* Outer ring */}
+            <circle cx="36" cy="36" r="32" fill="none" stroke="#00ff64" strokeWidth="1" strokeOpacity="0.4" />
+          </svg>
         </div>
 
         {/* App name */}
@@ -684,16 +751,21 @@ function SignInScreen() {
 }
 
 export default function App() {
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading, signOut, user } = useAuth();
+  const { hasEntitlement } = useEntitlements();
+  const isPro = hasEntitlement("pro");
+  const [showProPaywall, setShowProPaywall] = useState(false);
 
   // Panel state
   const [panelOpen, setPanelOpen] = useState(true);
   const [panelTab, setPanelTab] = useState<PanelTab>(() => {
-    const visited = localStorage.getItem("dronedaa.visited");
-    if (!visited) {
-      localStorage.setItem("dronedaa.visited", "1");
-      return "howto";
-    }
+    try {
+      const visited = localStorage.getItem("dronedaa.visited");
+      if (!visited) {
+        localStorage.setItem("dronedaa.visited", "1");
+        return "howto";
+      }
+    } catch { /* private browsing */ }
     return "maps";
   });
   const [wizardDismissed, setWizardDismissed] = useState(false);
@@ -1173,6 +1245,7 @@ export default function App() {
   // ── FAA airspace polylines ───────────────────────────────────────
 
   const faaPolylines: Polyline[] = useMemo(() => {
+    if (!isPro || !faa.zones?.length) return [];
     return faa.zones.map((zone) => ({
       id: `faa-${zone.id}`,
       points: zone.polygon,
@@ -1262,6 +1335,7 @@ export default function App() {
 
   // ── Obstruction annotations ──────────────────────────────────────
   const obstructionAnnotations: Annotation[] = useMemo(() => {
+    if (!isPro) return [];
     return faa.obstructions.map((obs) => ({
       id: obs.id,
       lat: obs.lat,
@@ -1271,7 +1345,7 @@ export default function App() {
       style: "obstruction",
       color: "#fb923c",
     }));
-  }, [faa.obstructions]);
+  }, [isPro, faa.obstructions]);
 
   const allMapAnnotations: Annotation[] = useMemo(() => [
     ...mapAnnotations,
@@ -1444,6 +1518,13 @@ export default function App() {
                 {mapLayer === "topo" && (
                   <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
                     <div className="sectionTitle" style={{ fontSize: 12, marginTop: 4 }}>Offline Maps</div>
+                    {!isPro && (
+                      <div style={{ padding: "12px 14px", borderRadius: 10, background: "rgba(10,132,255,0.08)", border: "1px solid rgba(10,132,255,0.2)" }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.9)", marginBottom: 4 }}>Offline Maps — Pro Feature</div>
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginBottom: 10, lineHeight: 1.4 }}>Download topo tiles and FAA layers for use without an internet connection.</div>
+                        <button className="chipBtn" style={{ width: "100%", textAlign: "center", background: "rgba(10,132,255,0.15)", borderColor: "rgba(10,132,255,0.4)", color: "#4da3ff" }} onClick={() => setShowProPaywall(true)}>Unlock Pro</button>
+                      </div>
+                    )}
                     <p style={{
                       margin: 0, fontSize: 11, lineHeight: 1.4,
                       color: "#ffd60a", fontWeight: 500,
@@ -1456,7 +1537,7 @@ export default function App() {
                     </p>
                     <button
                       className="chipBtn"
-                      disabled={!!downloadProgress?.downloading}
+                      disabled={!isPro || !!downloadProgress?.downloading}
                       onClick={async () => {
                         const { downloadTilesForArea, getCacheStats, cacheFaaLayer } = await import("./services/offlineTiles");
                         const { FAA_LAYERS: allLayers, fetchAirspace: fetchAir, fetchObstructions: fetchObs } = await import("./services/airspace");
@@ -1554,6 +1635,14 @@ export default function App() {
 
                 {/* FAA Airspace Layer Toggles */}
                 <div className="sectionTitle">FAA Airspace Layers</div>
+                {!isPro && (
+                  <div style={{ padding: "12px 14px", borderRadius: 10, background: "rgba(10,132,255,0.08)", border: "1px solid rgba(10,132,255,0.2)", marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.9)", marginBottom: 4 }}>FAA Layers — Pro Feature</div>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginBottom: 10, lineHeight: 1.4 }}>Display airspace classes, TFRs, restricted areas, and obstructions on the map.</div>
+                    <button className="chipBtn" style={{ width: "100%", textAlign: "center", background: "rgba(10,132,255,0.15)", borderColor: "rgba(10,132,255,0.4)", color: "#4da3ff" }} onClick={() => setShowProPaywall(true)}>Unlock Pro</button>
+                  </div>
+                )}
+                <div style={{ opacity: isPro ? 1 : 0.35, pointerEvents: isPro ? "auto" : "none" }}>
                 <p className="smallMuted">Toggle layers to display on map. Data from FAA ArcGIS.</p>
 
                 {/* VFR Sectional chart overlay */}
@@ -1606,6 +1695,7 @@ export default function App() {
                 {faa.error && (
                   <p className="errText">{faa.error}</p>
                 )}
+                </div>
               </div>
             )}
 
@@ -1785,11 +1875,6 @@ export default function App() {
                   <span className="smallMuted">{CENTER_SOURCE_LABELS.tapMap}</span>
                 </div>
 
-                <div className="smallMuted" style={{ marginTop: 4, fontSize: 10, opacity: 0.5 }}>
-                  Device: {gps ? `${gps.lat.toFixed(4)}, ${gps.lon.toFixed(4)}` : "—"}
-                  {" · "}GDL-90: {adsb.ownship ? `${adsb.ownship.lat.toFixed(4)}, ${adsb.ownship.lon.toFixed(4)}` : "—"}
-                  {" · "}skyAlert: {skyAlert.gps ? `${skyAlert.gps.lat.toFixed(4)}, ${skyAlert.gps.lon.toFixed(4)}` : "—"}
-                </div>
 
                 {resolvedCenter && (
                   <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 8 }}>
@@ -2237,7 +2322,7 @@ export default function App() {
                               const h = Math.min(intensity * 60, 24); // scale: 1mm/hr → full bar
                               return (
                                 <rect
-                                  key={i}
+                                  key={idx}
                                   x={i * 25 + 2}
                                   y={28 - h}
                                   width={20}
@@ -2517,6 +2602,21 @@ export default function App() {
 
             {panelTab === "settings" && (
               <div className="panelSection">
+                {/* Account */}
+                <div className="row" style={{ marginBottom: 4 }}>
+                  <span className="rowTitle" style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
+                    {user?.email || user?.displayName || "Signed in"}
+                  </span>
+                  <button
+                    className="chipBtn compact"
+                    style={{ color: "#ff453a", borderColor: "rgba(255,69,58,0.3)" }}
+                    onClick={signOut}
+                  >
+                    Sign Out
+                  </button>
+                </div>
+                <div className="divider" />
+
                 {/* ADS-B Connection */}
                 <div className="sectionTitle">{isNative() ? "ADS-B Receiver" : "Relay"}</div>
                 <div className="row">
@@ -2547,11 +2647,6 @@ export default function App() {
                     </button>
                   )}
                 </div>
-                {/* Diagnostic info */}
-                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 4, fontFamily: "monospace" }}>
-                  {isNative() ? "GDL-90 UDP :4000" : `WS: ${adsb.wsUrl || "n/a"}`} | State: {adsb.status}
-                  {adsb.lastError && <span style={{ color: "#ff453a" }}> | {adsb.lastError}</span>}
-                </div>
 
                 {skyAlert.detected && skyValues && (
                   <div style={{
@@ -2564,8 +2659,34 @@ export default function App() {
                       {skyAlert.loading && <span className="smallMuted">loading...</span>}
                     </div>
 
+                    {/* Pro gate */}
+                    {!isPro && (
+                      <div style={{
+                        marginTop: 8, marginBottom: 4,
+                        padding: "12px 14px",
+                        borderRadius: 10,
+                        background: "rgba(228, 0, 43, 0.08)",
+                        border: "1px solid rgba(228, 0, 43, 0.25)",
+                        textAlign: "center",
+                      }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.9)", marginBottom: 4 }}>
+                          skyAlert Controls — Pro Feature
+                        </div>
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginBottom: 10, lineHeight: 1.4 }}>
+                          Sync alert thresholds and control your skyAlert device directly from DroneDAA.
+                        </div>
+                        <button
+                          className="chipBtn compact active"
+                          style={{ color: "#e4002b", borderColor: "rgba(228,0,43,0.5)", background: "rgba(228,0,43,0.15)" }}
+                          onClick={() => setShowProPaywall(true)}
+                        >
+                          Learn More &amp; Unlock
+                        </button>
+                      </div>
+                    )}
+
                     {/* Unsaved changes banner */}
-                    {skyDirty && (
+                    {isPro && skyDirty && (
                       <div style={{
                         display: "flex", alignItems: "center", justifyContent: "space-between",
                         padding: "6px 10px", borderRadius: 6, marginBottom: 8,
@@ -2586,6 +2707,8 @@ export default function App() {
                       </div>
                     )}
 
+                    {/* Controls — Pro only */}
+                    {isPro && skyValues && <div>
                     {/* Traffic Proximity Alarm */}
                     <div className="sectionTitle" style={{ fontSize: 12, marginTop: 4 }}>Traffic Proximity Alarm</div>
 
@@ -2733,15 +2856,18 @@ export default function App() {
                     {skyAlert.error && (
                       <p className="errText" style={{ marginTop: 4 }}>{skyAlert.error}</p>
                     )}
+                    </div>}
                   </div>
                 )}
 
                 <div className="divider" />
 
                 <div style={{ marginTop: 8, fontSize: 11, color: "rgba(255, 255, 255, 0.35)" }}>
-                  <a href="/privacy" className="linkBtn">Privacy Policy</a>
+                  <a href="https://detectandavoid.com/privacy" target="_blank" rel="noopener" className="linkBtn">Privacy Policy</a>
                   {" · "}
-                  <a href="/support" className="linkBtn">Support</a>
+                  <a href="https://detectandavoid.com/terms" target="_blank" rel="noopener" className="linkBtn">Terms of Service</a>
+                  {" · "}
+                  <a href="https://detectandavoid.com/support" target="_blank" rel="noopener" className="linkBtn">Support</a>
                 </div>
               </div>
             )}
@@ -2792,6 +2918,7 @@ export default function App() {
                 {rid.count === 0 && (rid.status === "scanning" || rid.status === "receiving") && (
                   <p className="smallMuted" style={{ marginTop: 8 }}>
                     No drones detected yet. Ensure you are within broadcast range.
+                    Scanning continues in the background while you use other tabs.
                   </p>
                 )}
 
@@ -2799,6 +2926,7 @@ export default function App() {
                   <p className="smallMuted" style={{ marginTop: 8 }}>
                     Start scanning to detect nearby drones broadcasting Remote ID
                     via Bluetooth 5 or WiFi. Compatible with ASTM F3586-22.
+                    Scanning runs in the background until you tap Stop.
                   </p>
                 )}
               </div>
@@ -3008,6 +3136,9 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* ── Pro Paywall Modal ── */}
+      {showProPaywall && <ProPaywall onClose={() => setShowProPaywall(false)} />}
     </div>
   );
 }

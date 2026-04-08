@@ -46,7 +46,14 @@ public class StoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func handleTransactionUpdate(_ result: VerificationResult<Transaction>) async {
         guard case .verified(let transaction) = result else {
-            print("[StoreKit] Unverified transaction update ignored")
+            #if DEBUG
+            print("[StoreKit] Unverified transaction update — notifying JS for retry")
+            #endif
+            // Notify JS so it can prompt the user to retry or contact support
+            notifyListeners("transactionError", data: [
+                "error": "Transaction could not be verified by StoreKit",
+                "reason": "unverified",
+            ])
             return
         }
 
@@ -55,8 +62,9 @@ public class StoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
         var data = transactionToDict(transaction)
         data["signedTransaction"] = result.jwsRepresentation
         notifyListeners("transactionUpdate", data: data)
-
+        #if DEBUG
         print("[StoreKit] Transaction update received: \(transaction.id)")
+        #endif
     }
 
     // MARK: - Plugin Methods
@@ -87,7 +95,9 @@ public class StoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
                 let productDicts = products.map { productToDict($0) }
                 call.resolve(["products": productDicts])
             } catch {
+                #if DEBUG
                 print("[StoreKit] Failed to fetch products: \(error)")
+                #endif
                 call.reject("Failed to fetch products: \(error.localizedDescription)")
             }
         }
@@ -146,7 +156,9 @@ public class StoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
                 }
 
             } catch {
+                #if DEBUG
                 print("[StoreKit] Purchase failed: \(error)")
+                #endif
                 call.resolve([
                     "status": "error",
                     "message": error.localizedDescription
@@ -180,7 +192,9 @@ public class StoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
                 call.resolve(["transactions": transactions])
 
             } catch {
+                #if DEBUG
                 print("[StoreKit] Restore failed: \(error)")
+                #endif
                 call.resolve([
                     "transactions": [],
                     "error": error.localizedDescription
@@ -207,14 +221,18 @@ public class StoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
                 if case .verified(let transaction) = result,
                    transaction.id == transactionId {
                     await transaction.finish()
+                    #if DEBUG
                     print("[StoreKit] Transaction finished: \(transactionId)")
+                    #endif
                     call.resolve()
                     return
                 }
             }
 
             // Transaction might already be finished, that's ok
+            #if DEBUG
             print("[StoreKit] Transaction not found (may already be finished): \(transactionId)")
+            #endif
             call.resolve()
         }
     }

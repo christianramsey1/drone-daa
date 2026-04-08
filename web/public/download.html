@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Download DroneDAA Relay</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0a;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 480px;
+      background: #141414;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      padding: 36px 32px 32px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      flex-shrink: 0;
+    }
+
+    .header-text h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.2;
+    }
+
+    .header-text p {
+      font-size: 13px;
+      color: rgba(255,255,255,0.45);
+      margin-top: 3px;
+      line-height: 1.4;
+    }
+
+    .description {
+      font-size: 13px;
+      color: rgba(255,255,255,0.55);
+      line-height: 1.6;
+      margin-bottom: 28px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.3);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 10px;
+    }
+
+    .download-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      text-decoration: none;
+      transition: background 0.15s;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .btn:hover {
+      background: rgba(255,255,255,0.06);
+    }
+
+    .btn-mac {
+      background: rgba(255,255,255,0.04);
+    }
+
+    .btn-win {
+      background: rgba(255,255,255,0.04);
+    }
+
+    .btn-icon {
+      font-size: 22px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .btn-text {
+      flex: 1;
+    }
+
+    .btn-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      display: block;
+    }
+
+    .btn-sub {
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      display: block;
+      margin-top: 2px;
+    }
+
+    .btn-arrow {
+      font-size: 16px;
+      color: rgba(255,255,255,0.25);
+    }
+
+    .steps {
+      margin-bottom: 24px;
+    }
+
+    .step {
+      display: flex;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .step:last-child {
+      border-bottom: none;
+    }
+
+    .step-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(0,255,100,0.12);
+      border: 1px solid rgba(0,255,100,0.25);
+      color: #00ff64;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .step-text {
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+      line-height: 1.5;
+    }
+
+    .step-text strong {
+      color: rgba(255,255,255,0.8);
+      font-weight: 600;
+    }
+
+    .footer {
+      font-size: 11px;
+      color: rgba(255,255,255,0.25);
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    .footer a {
+      color: rgba(255,255,255,0.4);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      color: rgba(255,255,255,0.6);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+        <defs>
+          <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#001a0e"/>
+            <stop offset="100%" stop-color="#000a06"/>
+          </radialGradient>
+          <radialGradient id="glow" cx="50%" cy="50%" r="35%">
+            <stop offset="0%" stop-color="#00ff64" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="#00ff64" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect width="1024" height="1024" rx="224" ry="224" fill="url(#bg)"/>
+        <circle cx="512" cy="512" r="460" fill="url(#glow)"/>
+        <circle cx="512" cy="512" r="150" fill="none" stroke="#00ff64" stroke-width="5" stroke-opacity="0.22"/>
+        <circle cx="512" cy="512" r="300" fill="none" stroke="#00ff64" stroke-width="5" stroke-opacity="0.18"/>
+        <circle cx="512" cy="512" r="430" fill="none" stroke="#00ff64" stroke-width="5" stroke-opacity="0.13"/>
+        <line x1="472" y1="472" x2="358" y2="358" stroke="#00ff64" stroke-width="18" stroke-opacity="0.8" stroke-linecap="round"/>
+        <line x1="552" y1="472" x2="666" y2="358" stroke="#00ff64" stroke-width="18" stroke-opacity="0.8" stroke-linecap="round"/>
+        <line x1="472" y1="552" x2="358" y2="666" stroke="#00ff64" stroke-width="18" stroke-opacity="0.8" stroke-linecap="round"/>
+        <line x1="552" y1="552" x2="666" y2="666" stroke="#00ff64" stroke-width="18" stroke-opacity="0.8" stroke-linecap="round"/>
+        <rect x="468" y="468" width="88" height="88" rx="14" fill="#00ff64" fill-opacity="0.88"/>
+        <circle cx="334" cy="334" r="52" fill="none" stroke="#00ff64" stroke-width="12" stroke-opacity="0.72"/>
+        <circle cx="690" cy="334" r="52" fill="none" stroke="#00ff64" stroke-width="12" stroke-opacity="0.72"/>
+        <circle cx="334" cy="690" r="52" fill="none" stroke="#00ff64" stroke-width="12" stroke-opacity="0.72"/>
+        <circle cx="690" cy="690" r="52" fill="none" stroke="#00ff64" stroke-width="12" stroke-opacity="0.72"/>
+        <circle cx="334" cy="334" r="10" fill="#00ff64" fill-opacity="0.7"/>
+        <circle cx="690" cy="334" r="10" fill="#00ff64" fill-opacity="0.7"/>
+        <circle cx="334" cy="690" r="10" fill="#00ff64" fill-opacity="0.7"/>
+        <circle cx="690" cy="690" r="10" fill="#00ff64" fill-opacity="0.7"/>
+        <circle cx="760" cy="196" r="22" fill="#ff3b30" fill-opacity="0.95"/>
+        <circle cx="760" cy="196" r="40" fill="none" stroke="#ff3b30" stroke-width="6" stroke-opacity="0.45"/>
+        <circle cx="512" cy="512" r="452" fill="none" stroke="#00ff64" stroke-width="8" stroke-opacity="0.32"/>
+      </svg>
+      <div class="header-text">
+        <h1>DroneDAA Relay</h1>
+        <p>ADS-B &amp; Remote ID bridge for Mac and Windows</p>
+      </div>
+    </div>
+
+    <p class="description">
+      The relay runs as a system tray app on your computer, receiving GDL-90 ADS-B data from your
+      skyAlert receiver and Remote ID signals via Bluetooth — then forwarding them to the DroneDAA
+      web app or iOS app over your local network.
+    </p>
+
+    <div class="section-title">Download</div>
+    <div class="download-buttons">
+      <a class="btn btn-mac" href="https://github.com/christianramsey1/drone-daa/releases/latest/download/DroneDAA-Relay.dmg">
+        <span class="btn-icon"></span>
+        <span class="btn-text">
+          <span class="btn-title">macOS — Apple Silicon</span>
+          <span class="btn-sub">DroneDAA-Relay.dmg · Requires macOS 13+</span>
+        </span>
+        <span class="btn-arrow">↓</span>
+      </a>
+      <a class="btn btn-win" href="https://github.com/christianramsey1/drone-daa/releases/latest/download/DroneDAA-Relay-Setup.exe">
+        <span class="btn-icon">🪟</span>
+        <span class="btn-text">
+          <span class="btn-title">Windows</span>
+          <span class="btn-sub">DroneDAA-Relay-Setup.exe · Requires Windows 10+</span>
+        </span>
+        <span class="btn-arrow">↓</span>
+      </a>
+    </div>
+
+    <div class="section-title">Setup</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text"><strong>Install and launch</strong> — the relay appears as a tray icon (green = receiving data, yellow = waiting, red = error).</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text"><strong>Connect your skyAlert</strong> — join your computer to the skyAlert's WiFi network. The relay listens for GDL-90 on UDP port 4000 automatically.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text"><strong>Open DroneDAA</strong> — on iOS, the app receives data natively. On a browser on the same network, open <strong>http://localhost:4001</strong>.</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <a href="https://detectandavoid.com">detectandavoid.com</a> &nbsp;·&nbsp;
+      <a href="/support.html">Support</a> &nbsp;·&nbsp;
+      <a href="/privacy.html">Privacy</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -65,11 +65,29 @@ public class RemoteIdPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private let staleTimeoutSec: TimeInterval = 30.0
 
+    deinit {
+        scanning = false
+        centralManager?.stopScan()
+        pushTimer?.cancel()
+        pushTimer = nil
+        centralManager = nil
+        centralDelegate = nil
+    }
+
     // MARK: - Plugin Methods
 
     @objc func startScanning(_ call: CAPPluginCall) {
         queue.async { [weak self] in
             guard let self = self else { return }
+
+            // Check Bluetooth authorization before creating manager
+            if #available(iOS 13.1, *) {
+                let auth = CBCentralManager.authorization
+                if auth == .denied || auth == .restricted {
+                    call.resolve(["started": false, "error": "Bluetooth permission denied. Enable in Settings > Privacy > Bluetooth."])
+                    return
+                }
+            }
 
             if self.centralDelegate == nil {
                 self.centralDelegate = BLEDelegate(plugin: self)
@@ -100,6 +118,8 @@ public class RemoteIdPlugin: CAPPlugin, CAPBridgedPlugin {
             self.pushTimer = nil
             self.droneMap.removeAll()
             self.peripheralToSerial.removeAll()
+            self.centralManager = nil
+            self.centralDelegate = nil
             call.resolve()
         }
     }
@@ -126,7 +146,9 @@ public class RemoteIdPlugin: CAPPlugin, CAPBridgedPlugin {
         centralManager?.scanForPeripherals(withServices: [odidUUID], options: [
             CBCentralManagerScanOptionAllowDuplicatesKey: true,
         ])
+        #if DEBUG
         print("[RID] BLE scanning started (ODID UUID: \(odidUUID.uuidString))")
+        #endif
     }
 
     fileprivate func handleDiscovery(peripheral: CBPeripheral, advertisementData: [String: Any], rssi: NSNumber) {
@@ -159,12 +181,21 @@ public class RemoteIdPlugin: CAPPlugin, CAPBridgedPlugin {
         func centralManagerDidUpdateState(_ central: CBCentralManager) {
             switch central.state {
             case .poweredOn:
+                #if DEBUG
                 print("[RID] Bluetooth powered on")
+                #endif
                 plugin?.beginScan()
+                plugin?.notifyListeners("bleStateChange", data: ["state": "poweredOn"])
             case .poweredOff:
+                #if DEBUG
                 print("[RID] Bluetooth powered off")
+                #endif
+                plugin?.notifyListeners("bleStateChange", data: ["state": "poweredOff", "error": "Bluetooth is turned off"])
             case .unauthorized:
+                #if DEBUG
                 print("[RID] Bluetooth unauthorized")
+                #endif
+                plugin?.notifyListeners("bleStateChange", data: ["state": "unauthorized", "error": "Bluetooth permission denied"])
             default:
                 break
             }

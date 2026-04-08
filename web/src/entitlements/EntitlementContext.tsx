@@ -36,11 +36,17 @@ export function EntitlementProvider({ children }: { children: React.ReactNode })
     setError(null);
 
     try {
-      const res = await fetch(`${getApiBaseUrl()}/api/me/entitlements`, {
-        headers: {
-          Authorization: `Bearer ${sessionToken}`,
-        },
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      let res: Response;
+      try {
+        res = await fetch(`${getApiBaseUrl()}/api/me/entitlements`, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!res.ok) {
         throw new Error(`Failed to fetch entitlements: ${res.status}`);
@@ -65,6 +71,15 @@ export function EntitlementProvider({ children }: { children: React.ReactNode })
     } else {
       setEntitlements([]);
     }
+
+    // Refresh entitlements when app returns to foreground
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && isAuthenticated) {
+        fetchEntitlements();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [isAuthenticated, fetchEntitlements]);
 
   const hasEntitlement = useCallback(

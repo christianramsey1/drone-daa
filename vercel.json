@@ -43,6 +43,9 @@
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/privacy", "destination": "/privacy.html" },
     { "source": "/support", "destination": "/support.html" },
+    { "source": "/terms", "destination": "/terms.html" },
+    { "source": "/about", "destination": "/about.html" },
+    { "source": "/download", "destination": "/download.html" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }

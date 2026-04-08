@@ -31,10 +31,20 @@
 const { verifyAppleIdentityToken } = require("../shared/apple");
 const { createSessionToken } = require("../shared/jwt");
 const { findOrCreateUser } = require("../shared/db");
+const { checkRateLimit } = require("../shared/ratelimit");
+
+const ALLOWED_ORIGINS = [
+  "https://detectandavoid.com",
+  "capacitor://localhost",
+  "http://localhost:5173",
+  "http://localhost:4001",
+];
 
 module.exports = async (req, res) => {
-  // CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // CORS headers — restrict to known origins
+  const origin = req.headers.origin || "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
@@ -44,6 +54,13 @@ module.exports = async (req, res) => {
 
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
+  }
+
+  // Rate limit: 5 attempts per minute per IP
+  const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
+  const { limited } = checkRateLimit(ip, "auth", 5, 60_000);
+  if (limited) {
+    return res.status(429).json({ ok: false, error: "Too many requests. Try again in a minute." });
   }
 
   try {
@@ -56,15 +73,17 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Get client ID from environment
-    const clientId = process.env.APPLE_CLIENT_ID;
-    if (!clientId) {
+    // Get client IDs — native iOS tokens use bundle ID as aud, web uses Services ID
+    const serviceId = process.env.APPLE_CLIENT_ID;
+    if (!serviceId) {
       console.error("[Auth] APPLE_CLIENT_ID not configured");
       return res.status(500).json({
         ok: false,
         error: "Server configuration error",
       });
     }
+    const bundleId = process.env.APPLE_BUNDLE_ID || "com.dronedaa.app";
+    const clientId = [serviceId, bundleId];
 
     // Verify the Apple identity token
     console.log("[Auth] Verifying Apple identity token...");

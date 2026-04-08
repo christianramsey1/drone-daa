@@ -122,13 +122,11 @@ export function useSkyAlert(adsbConnected: boolean): SkyAlertState {
         try {
           const json = JSON.parse(text);
           if (json.gps?.lat && json.gps?.lon) {
-            console.log(`[skyAlert] GPS from JSON ${url}:`, json.gps);
             setGps({ lat: json.gps.lat, lon: json.gps.lon });
             return;
           }
           // Some devices put position at top level
           if (json.lat && json.lon) {
-            console.log(`[skyAlert] GPS from JSON ${url}: ${json.lat}, ${json.lon}`);
             setGps({ lat: json.lat, lon: json.lon });
             return;
           }
@@ -140,7 +138,6 @@ export function useSkyAlert(adsbConnected: boolean): SkyAlertState {
           const lat = parseFloat(coordMatch[1]);
           const lon = parseFloat(coordMatch[2]);
           if (Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && lat !== 0 && lon !== 0) {
-            console.log(`[skyAlert] GPS from HTML ${url}: ${lat}, ${lon}`);
             setGps({ lat, lon });
             return;
           }
@@ -187,17 +184,21 @@ export function useSkyAlert(adsbConnected: boolean): SkyAlertState {
       mountedRef.current = false;
       if (probeTimer.current) clearInterval(probeTimer.current);
     };
-  }, [adsbConnected, fetchSettings]);
+  }, [adsbConnected, fetchSettings, fetchGps]);
 
   const save = useCallback(async (data: SkyAlertSettings): Promise<boolean> => {
     setSaving(true);
     setError(null);
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5_000);
       const res = await fetch(`${base()}/settings/?action=set`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await fetchSettings();
       return true;
@@ -234,7 +235,6 @@ export function useSkyAlert(adsbConnected: boolean): SkyAlertState {
         signal: controller.signal,
       });
       clearTimeout(timeout);
-      console.log(`[skyAlert] action ${name} → ${res.status}`);
       return res.ok;
     } catch (err: any) {
       if (mountedRef.current) setError(err?.message ?? `Action ${name} failed`);

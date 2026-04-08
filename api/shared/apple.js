@@ -52,7 +52,7 @@ async function verifyAppleIdentityToken(identityToken, clientId) {
   try {
     const { payload } = await jose.jwtVerify(identityToken, jwks, {
       issuer: "https://appleid.apple.com",
-      audience: clientId,
+      audience: Array.isArray(clientId) ? clientId : [clientId],
     });
 
     // Validate required claims

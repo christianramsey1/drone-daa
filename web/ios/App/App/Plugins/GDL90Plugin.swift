@@ -27,6 +27,8 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
     private var sockFd: Int32 = -1
     private var shouldReceive = false
     private let queue = DispatchQueue(label: "com.dronedaa.gdl90", qos: .userInitiated)
+    private let sockLock = NSLock()
+    private var recvThread: Thread?
 
     private var aircraftMap: [String: [String: Any]] = [:]
     private var ownship: [String: Any]? = nil
@@ -57,92 +59,119 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
         let port = call.getInt("port") ?? 4000
         stopListenerInternal()
 
-        // Create UDP socket
-        let fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
-        guard fd >= 0 else {
-            call.reject("socket() failed: errno \(errno)")
-            return
-        }
-
-        // Allow multiple sockets on same port (in case of restart)
-        var one: Int32 = 1
-        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, socklen_t(MemoryLayout<Int32>.size))
-        setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one, socklen_t(MemoryLayout<Int32>.size))
-        // Enable receiving broadcast packets
-        setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &one, socklen_t(MemoryLayout<Int32>.size))
-
-        // Bind to INADDR_ANY:port — receives directed UDP, subnet broadcast, and 255.255.255.255
-        var addr = sockaddr_in()
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = in_port_t(UInt16(port).bigEndian)
-        addr.sin_addr.s_addr = INADDR_ANY
-        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-
-        // Retry bind up to 5 times (another app may hold the port briefly)
-        var bindResult: Int32 = -1
-        for attempt in 1...5 {
-            bindResult = withUnsafeMutablePointer(to: &addr) { addrPtr -> Int32 in
-                addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { saPtr -> Int32 in
-                    bind(fd, saPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
-                }
-            }
-            if bindResult == 0 {
-                print("[GDL90] bind() succeeded on attempt \(attempt)")
-                break
-            }
-            print("[GDL90] bind() attempt \(attempt) failed: errno \(errno) — retrying in 1s")
-            Thread.sleep(forTimeInterval: 1.0)
-        }
-
-        guard bindResult == 0 else {
-            close(fd)
-            call.reject("bind() failed after 5 attempts: errno \(errno). Another app may own port \(port).")
-            return
-        }
-
-        sockFd = fd
-        shouldReceive = true
-
-        print("[GDL90] BSD socket ready, listening on 0.0.0.0:\(port) (broadcast enabled)")
-
-        // Receive loop on a dedicated background thread
-        let capturedFd = fd
-        let thread = Thread { [weak self] in
+        queue.async { [weak self] in
             guard let self = self else { return }
-            var buf = [UInt8](repeating: 0, count: 4096)
-            var senderAddr = sockaddr_in()
-            var senderLen = socklen_t(MemoryLayout<sockaddr_in>.size)
 
-            while self.shouldReceive {
-                let n = withUnsafeMutablePointer(to: &senderAddr) {
-                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                        recvfrom(capturedFd, &buf, buf.count, 0, $0, &senderLen)
+            // Create UDP socket
+            let fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+            guard fd >= 0 else {
+                call.reject("socket() failed: errno \(errno)")
+                return
+            }
+
+            // Allow multiple sockets on same port (in case of restart)
+            var one: Int32 = 1
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, socklen_t(MemoryLayout<Int32>.size))
+            setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one, socklen_t(MemoryLayout<Int32>.size))
+            // Enable receiving broadcast packets
+            setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &one, socklen_t(MemoryLayout<Int32>.size))
+
+            // Bind to INADDR_ANY:port — receives directed UDP, subnet broadcast, and 255.255.255.255
+            var addr = sockaddr_in()
+            addr.sin_family = sa_family_t(AF_INET)
+            addr.sin_port = in_port_t(UInt16(port).bigEndian)
+            addr.sin_addr.s_addr = INADDR_ANY
+            addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+
+            // Retry bind up to 5 times (another app may hold the port briefly)
+            var bindResult: Int32 = -1
+            for attempt in 1...5 {
+                bindResult = withUnsafeMutablePointer(to: &addr) { addrPtr -> Int32 in
+                    addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { saPtr -> Int32 in
+                        bind(fd, saPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
                     }
                 }
-
-                if n > 0 {
-                    let data = Data(buf[0..<n])
-                    let sender = String(cString: inet_ntoa(senderAddr.sin_addr))
-                    print("[GDL90] Received \(n) bytes from \(sender)")
-                    self.queue.async {
-                        self.lastUdpReceived = Date()
-                        self.handleUdpData(data)
-                    }
-                } else if n < 0 && errno != EINTR {
-                    if self.shouldReceive {
-                        print("[GDL90] recvfrom error: errno \(errno)")
-                    }
+                if bindResult == 0 {
+                    #if DEBUG
+                    print("[GDL90] bind() succeeded on attempt \(attempt)")
+                    #endif
                     break
                 }
+                #if DEBUG
+                print("[GDL90] bind() attempt \(attempt) failed: errno \(errno) — retrying in 1s")
+                #endif
+                Thread.sleep(forTimeInterval: 1.0)
             }
-            print("[GDL90] Receive thread exiting")
-        }
-        thread.name = "com.dronedaa.gdl90.recv"
-        thread.qualityOfService = .userInitiated
-        thread.start()
 
-        startPushTimer()
-        call.resolve(["started": true])
+            guard bindResult == 0 else {
+                close(fd)
+                call.reject("bind() failed after 5 attempts: errno \(errno). Another app may own port \(port).")
+                return
+            }
+
+            self.sockFd = fd
+            self.shouldReceive = true
+
+            #if DEBUG
+            print("[GDL90] BSD socket ready, listening on 0.0.0.0:\(port) (broadcast enabled)")
+            #endif
+
+            // Set socket to non-blocking so close() unblocks recvfrom()
+            let flags = fcntl(fd, F_GETFL)
+            fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+
+            // Receive loop on a dedicated background thread
+            let capturedFd = fd
+            let thread = Thread { [weak self] in
+                guard let self = self else { return }
+                var buf = [UInt8](repeating: 0, count: 4096)
+                var senderAddr = sockaddr_in()
+                var senderLen = socklen_t(MemoryLayout<sockaddr_in>.size)
+
+                // Use poll() so non-blocking socket doesn't spin CPU
+                var pfd = pollfd(fd: capturedFd, events: Int16(POLLIN), revents: 0)
+
+                while self.shouldReceive {
+                    let pollResult = poll(&pfd, 1, 500) // 500ms timeout
+                    if pollResult <= 0 { continue }
+
+                    let n = withUnsafeMutablePointer(to: &senderAddr) {
+                        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                            recvfrom(capturedFd, &buf, buf.count, 0, $0, &senderLen)
+                        }
+                    }
+
+                    if n > 0 {
+                        let data = Data(buf[0..<n])
+                        #if DEBUG
+                        let sender = String(cString: inet_ntoa(senderAddr.sin_addr))
+                        print("[GDL90] Received \(n) bytes from \(sender)")
+                        #endif
+                        self.queue.async {
+                            self.lastUdpReceived = Date()
+                            self.handleUdpData(data)
+                        }
+                    } else if n < 0 && errno != EINTR && errno != EAGAIN {
+                        #if DEBUG
+                        if self.shouldReceive {
+                            print("[GDL90] recvfrom error: errno \(errno)")
+                        }
+                        #endif
+                        break
+                    }
+                }
+                #if DEBUG
+                print("[GDL90] Receive thread exiting")
+                #endif
+            }
+            thread.name = "com.dronedaa.gdl90.recv"
+            thread.qualityOfService = .userInitiated
+            self.recvThread = thread
+            thread.start()
+
+            self.startPushTimer()
+            call.resolve(["started": true])
+        }
     }
 
     @objc func stopListening(_ call: CAPPluginCall) {
@@ -244,11 +273,13 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
 
     private func stopListenerInternal() {
         shouldReceive = false
+        sockLock.lock()
         if sockFd >= 0 {
-            // Closing the fd unblocks any pending recvfrom()
             close(sockFd)
             sockFd = -1
         }
+        sockLock.unlock()
+        recvThread = nil
         pushTimer?.cancel()
         pushTimer = nil
     }

@@ -25,6 +25,7 @@
 		E1A0B0012D5F000000000012 /* GDL90Plugin.m in Sources */ = {isa = PBXBuildFile; fileRef = E1A0B0012D5F000000000013 /* GDL90Plugin.m */; };
 		E1A0B0012D5F000000000014 /* RemoteIdPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A0B0012D5F000000000015 /* RemoteIdPlugin.swift */; };
 		E1A0B0012D5F000000000016 /* RemoteIdPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = E1A0B0012D5F000000000017 /* RemoteIdPlugin.m */; };
+		E1A0B0012D5F00000000001B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E1A0B0012D5F00000000001A /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +47,7 @@
 		E1A0B0012D5F000000000009 /* AppleSignInPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppleSignInPlugin.m; sourceTree = "<group>"; };
 		E1A0B0012D5F00000000000B /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		E1A0B0012D5F00000000000C /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		E1A0B0012D5F00000000001A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		E1A0B0012D5F000000000011 /* GDL90Plugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GDL90Plugin.swift; sourceTree = "<group>"; };
 		E1A0B0012D5F000000000013 /* GDL90Plugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GDL90Plugin.m; sourceTree = "<group>"; };
 		E1A0B0012D5F000000000015 /* RemoteIdPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteIdPlugin.swift; sourceTree = "<group>"; };
@@ -90,6 +92,7 @@
 				E1A0B0012D5F000000000005 /* Plugins */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				E1A0B0012D5F00000000000C /* App.entitlements */,
+				E1A0B0012D5F00000000001A /* PrivacyInfo.xcprivacy */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				E1A0B0012D5F00000000000B /* ViewController.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -196,6 +199,7 @@
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+				E1A0B0012D5F00000000001B /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

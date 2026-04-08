@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DroneDAA — Detect and Avoid for Drone Pilots</title>
+  <meta name="description" content="Live ADS-B traffic, Remote ID drone detection, FAA airspace layers, and detect-and-avoid alerts for drone pilots. Works with skyAlert, Stratux, and any GDL-90 receiver.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0a;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+    }
+
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 20px 60px;
+      text-align: center;
+    }
+
+    .hero-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 20px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+    }
+
+    .tagline {
+      font-size: 18px;
+      color: rgba(255,255,255,0.55);
+      max-width: 500px;
+      line-height: 1.5;
+      margin-bottom: 32px;
+    }
+
+    .cta-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .cta {
+      display: inline-block;
+      padding: 12px 28px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+
+    .cta:hover { opacity: 0.85; }
+
+    .cta-primary {
+      background: #e4002b;
+      color: #fff;
+    }
+
+    .cta-secondary {
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 20px 80px;
+    }
+
+    .feature {
+      padding: 20px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .feature-icon {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+
+    .feature h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: rgba(255,255,255,0.9);
+    }
+
+    .feature p {
+      font-size: 13px;
+      color: rgba(255,255,255,0.5);
+      line-height: 1.5;
+    }
+
+    .compat {
+      text-align: center;
+      padding: 40px 20px 60px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .compat h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .compat p {
+      font-size: 14px;
+      color: rgba(255,255,255,0.45);
+      max-width: 500px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 24px 20px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      font-size: 12px;
+      color: rgba(255,255,255,0.3);
+    }
+
+    .footer a {
+      color: rgba(255,255,255,0.4);
+      text-decoration: none;
+    }
+
+    .footer a:hover { color: rgba(255,255,255,0.6); }
+  </style>
+</head>
+<body>
+  <section class="hero">
+    <svg class="hero-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+      <defs>
+        <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#001a0e"/>
+          <stop offset="100%" stop-color="#000a06"/>
+        </radialGradient>
+        <radialGradient id="glow" cx="50%" cy="50%" r="35%">
+          <stop offset="0%" stop-color="#00ff64" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="#00ff64" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect width="1024" height="1024" rx="224" ry="224" fill="url(#bg)"/>
+      <circle cx="512" cy="512" r="460" fill="url(#glow)"/>
+      <circle cx="512" cy="512" r="150" fill="none" stroke="#00ff64" stroke-width="5" stroke-opacity="0.22"/>
+      <circle cx="512" cy="512" r="300" fill="none" stroke="#00ff64" stroke-width="5" stroke-opacity="0.18"/>
+      <circle cx="512" cy="512" r="430" fill="none" stroke="#00ff64" stroke-width="5" stroke-opacity="0.13"/>
+      <line x1="472" y1="472" x2="358" y2="358" stroke="#00ff64" stroke-width="18" stroke-opacity="0.8" stroke-linecap="round"/>
+      <line x1="552" y1="472" x2="666" y2="358" stroke="#00ff64" stroke-width="18" stroke-opacity="0.8" stroke-linecap="round"/>
+      <line x1="472" y1="552" x2="358" y2="666" stroke="#00ff64" stroke-width="18" stroke-opacity="0.8" stroke-linecap="round"/>
+      <line x1="552" y1="552" x2="666" y2="666" stroke="#00ff64" stroke-width="18" stroke-opacity="0.8" stroke-linecap="round"/>
+      <rect x="468" y="468" width="88" height="88" rx="14" fill="#00ff64" fill-opacity="0.88"/>
+      <circle cx="334" cy="334" r="52" fill="none" stroke="#00ff64" stroke-width="12" stroke-opacity="0.72"/>
+      <circle cx="690" cy="334" r="52" fill="none" stroke="#00ff64" stroke-width="12" stroke-opacity="0.72"/>
+      <circle cx="334" cy="690" r="52" fill="none" stroke="#00ff64" stroke-width="12" stroke-opacity="0.72"/>
+      <circle cx="690" cy="690" r="52" fill="none" stroke="#00ff64" stroke-width="12" stroke-opacity="0.72"/>
+      <circle cx="334" cy="334" r="10" fill="#00ff64" fill-opacity="0.7"/>
+      <circle cx="690" cy="334" r="10" fill="#00ff64" fill-opacity="0.7"/>
+      <circle cx="334" cy="690" r="10" fill="#00ff64" fill-opacity="0.7"/>
+      <circle cx="690" cy="690" r="10" fill="#00ff64" fill-opacity="0.7"/>
+      <circle cx="760" cy="196" r="22" fill="#ff3b30" fill-opacity="0.95"/>
+      <circle cx="760" cy="196" r="40" fill="none" stroke="#ff3b30" stroke-width="6" stroke-opacity="0.45"/>
+      <circle cx="512" cy="512" r="452" fill="none" stroke="#00ff64" stroke-width="8" stroke-opacity="0.32"/>
+    </svg>
+
+    <h1>DroneDAA</h1>
+    <p class="tagline">
+      Live detect-and-avoid alerts, ADS-B traffic, Remote ID drone tracking,
+      FAA airspace layers, and weather — all in one app for drone pilots.
+    </p>
+
+    <div class="cta-row">
+      <a class="cta cta-primary" href="https://apps.apple.com/app/dronedaa/id000000000">Download for iOS</a>
+      <a class="cta cta-secondary" href="/download">Desktop Relay App</a>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="feature">
+      <div class="feature-icon">&#x1F6A8;</div>
+      <h3>Detect-and-Avoid Alerts</h3>
+      <p>Configurable caution and warning zones with audible tones and haptic feedback when manned aircraft enter your airspace.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#x2708;&#xFE0F;</div>
+      <h3>Live ADS-B Traffic</h3>
+      <p>See real-time aircraft positions from your GDL-90 receiver (skyAlert, Stratux, Sentry) on a satellite map.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#x1F4E1;</div>
+      <h3>Remote ID Scanning</h3>
+      <p>Detect nearby drones broadcasting ASTM F3411-22a Remote ID via Bluetooth 5 — no extra hardware needed on iOS.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#x1F5FA;&#xFE0F;</div>
+      <h3>FAA Airspace Layers</h3>
+      <p>Display Class B/C/D/E airspace, TFRs, restricted areas, and obstructions directly on the map. Pro feature.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#x1F4E5;</div>
+      <h3>Offline Maps</h3>
+      <p>Download topo map tiles and FAA layers for field use — fly without internet when connected to your receiver's hotspot.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#x1F321;&#xFE0F;</div>
+      <h3>Aviation Weather</h3>
+      <p>Wind speed, gusts, temperature, visibility, cloud cover, and hourly forecasts powered by Apple WeatherKit.</p>
+    </div>
+  </section>
+
+  <section class="compat">
+    <h2>Compatible Receivers</h2>
+    <p>
+      Works with any GDL-90 compatible ADS-B receiver including uAvionix skyAlert,
+      Stratux, ForeFlight Sentry, and Dual XGPS 190. On iOS, the app receives data directly
+      via WiFi — no relay app needed.
+    </p>
+  </section>
+
+  <footer class="footer">
+    <p>
+      &copy; 2026 CAVU CONSULTING LLC &nbsp;&middot;&nbsp;
+      <a href="/privacy">Privacy</a> &nbsp;&middot;&nbsp;
+      <a href="/terms">Terms</a> &nbsp;&middot;&nbsp;
+      <a href="/support">Support</a>
+    </p>
+  </footer>
+</body>
+</html>

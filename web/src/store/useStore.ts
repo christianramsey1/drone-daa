@@ -123,20 +123,28 @@ export function useStore(): UseStoreReturn {
       const apiBase = getApiBaseUrl();
 
       try {
-        const response = await fetch(`${apiBase}/api/purchases/ios/verify`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${sessionToken}`,
-          },
-          body: JSON.stringify({
-            productId: transaction.productId,
-            transactionId: transaction.id,
-            originalTransactionId: transaction.originalId,
-            signedTransaction: transaction.signedTransaction,
-            environment: transaction.environment,
-          }),
-        });
+        const verifyController = new AbortController();
+        const verifyTimeout = setTimeout(() => verifyController.abort(), 15_000);
+        let response: Response;
+        try {
+          response = await fetch(`${apiBase}/api/purchases/ios/verify`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${sessionToken}`,
+            },
+            signal: verifyController.signal,
+            body: JSON.stringify({
+              productId: transaction.productId,
+              transactionId: transaction.id,
+              originalTransactionId: transaction.originalId,
+              signedTransaction: transaction.signedTransaction,
+              environment: transaction.environment,
+            }),
+          });
+        } finally {
+          clearTimeout(verifyTimeout);
+        }
 
         const data = await response.json();
 
@@ -145,8 +153,14 @@ export function useStore(): UseStoreReturn {
           return false;
         }
 
-        // Mark transaction as finished in StoreKit
-        await StoreKit.finishTransaction({ transactionId: transaction.id });
+        // Backend verified — entitlement is granted. Finish the transaction.
+        // If finishTransaction fails, the entitlement is still active;
+        // StoreKit will retry finishing on next app launch via Transaction.updates.
+        try {
+          await StoreKit.finishTransaction({ transactionId: transaction.id });
+        } catch (finishErr) {
+          console.error("[Store] finishTransaction failed (entitlement still granted):", finishErr);
+        }
 
         console.log("[Store] Transaction verified and finished:", transaction.id);
         return true;

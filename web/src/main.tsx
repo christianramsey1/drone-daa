@@ -4,13 +4,16 @@ import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './auth'
 import { EntitlementProvider } from './entitlements'
+import { ErrorBoundary } from './ErrorBoundary'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthProvider>
-      <EntitlementProvider>
-        <App />
-      </EntitlementProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <EntitlementProvider>
+          <App />
+        </EntitlementProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )
