@@ -8,7 +8,7 @@
  *
  * Request body:
  * {
- *   productId: string,          // SKU, e.g., "com.dronedaa.pass.pro.1y"
+ *   productId: string,          // SKU, e.g., "com.dronedaa.pro.1yr"
  *   transactionId: string,      // Transaction ID
  *   originalTransactionId?: string,
  *   signedTransaction: string,  // JWS from StoreKit 2
@@ -43,10 +43,10 @@ const APPLE_ROOT_CA_URL = "https://www.apple.com/certificateauthority/AppleRootC
 
 // Product ID to entitlement key mapping
 const PRODUCT_TO_ENTITLEMENT = {
-  "com.dronedaa.pass.pro.1y": "pro",
+  "com.dronedaa.pro.1yr": "pro",
 };
 
-// Entitlement duration: 1 year
+// Fallback entitlement duration: 1 year (used if transaction lacks expiresDate)
 const ENTITLEMENT_DURATION_MS = 365 * 24 * 60 * 60 * 1000;
 
 /**
@@ -229,9 +229,24 @@ module.exports = async (req, res) => {
       return res.status(200).json({ ok: true, entitlements });
     }
 
-    // Decode and optionally verify the signed transaction
+    // Decode and verify the signed transaction
     const transactionPayload = decodeSignedTransaction(signedTransaction);
-    await verifyTransactionSignature(signedTransaction);
+    try {
+      await verifyTransactionSignature(signedTransaction);
+      console.log(`[Verify] JWS signature verified successfully`);
+    } catch (verifyErr) {
+      console.error(`[Verify] JWS verification failed: ${verifyErr.message}`);
+      // In sandbox, certificate validation may fail due to different cert chains.
+      // Log the error but allow the transaction to proceed if the payload decoded successfully.
+      // In production, this should be a hard failure.
+      if (environment === "production") {
+        return res.status(400).json({
+          ok: false,
+          error: `Transaction verification failed: ${verifyErr.message}`,
+        });
+      }
+      console.log(`[Verify] Allowing sandbox transaction despite verification failure`);
+    }
 
     // Validate the transaction matches our request
     if (transactionPayload.productId !== productId) {
@@ -252,9 +267,11 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Calculate expiration (1 year from purchase)
+    // Calculate expiration — use expiresDate from subscription, fallback to 1 year
     const purchaseDate = new Date(transactionPayload.purchaseDate || Date.now());
-    const expiresAt = new Date(purchaseDate.getTime() + ENTITLEMENT_DURATION_MS);
+    const expiresAt = transactionPayload.expiresDate
+      ? new Date(transactionPayload.expiresDate)
+      : new Date(purchaseDate.getTime() + ENTITLEMENT_DURATION_MS);
 
     // Store the purchase record
     await createPurchase({

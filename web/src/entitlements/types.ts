@@ -28,12 +28,13 @@ export type AuthState = {
 
 /**
  * Product ID naming convention:
- * - Feature: com.dronedaa.pass.<feature>.1y
- * - Pro: com.dronedaa.pass.pro.1y
+ * - Feature: com.dronedaa.<feature>.<period>
+ * - Pro: com.dronedaa.pro.1yr
  */
 export function skuToEntitlementKey(productId: string): string | null {
-  const featureMatch = productId.match(/^com\.dronedaa\.pass\.(\w+)\.1y$/);
-  if (featureMatch) return featureMatch[1];
+  // com.dronedaa.pro.1yr → "pro"
+  const match = productId.match(/^com\.dronedaa\.(\w+)\.\w+$/);
+  if (match) return match[1];
 
   return null;
 }
@@ -42,6 +43,6 @@ export function skuToEntitlementKey(productId: string): string | null {
  * Convert entitlement key to product ID
  */
 export function entitlementKeyToSku(key: string): string | null {
-  if (/^\w+$/.test(key)) return `com.dronedaa.pass.${key}.1y`;
+  if (key === "pro") return "com.dronedaa.pro.1yr";
   return null;
 }

@@ -1,21 +1,7 @@
 {
   "identifier" : "D4E5F6A7-8B9C-4D0E-A1B2-C3D4E5F6A7B8",
   "nonRenewingSubscriptions" : [
-    {
-      "displayPrice" : "9.99",
-      "familyShareable" : false,
-      "internalID" : "A0000001-0001-0001-0001-000000000001",
-      "localizations" : [
-        {
-          "description" : "Unlock DroneDAA Pro for one year. Includes real-time ADS-B traffic alerts, Remote ID tracking, advanced DAA features, and offline maps. Valid for 365 days from purchase.",
-          "displayName" : "DroneDAA Pro — 1 Year",
-          "locale" : "en_US"
-        }
-      ],
-      "productID" : "com.dronedaa.pass.pro.1y",
-      "referenceName" : "DroneDAA Pro — 1 Year",
-      "type" : "NonRenewingSubscription"
-    }
+
   ],
   "products" : [
 
@@ -34,7 +20,39 @@
     ]
   },
   "subscriptionGroups" : [
+    {
+      "id" : "B1C2D3E4-5F6A-7B8C-9D0E-F1A2B3C4D5E6",
+      "localizations" : [
 
+      ],
+      "name" : "DroneDAA Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "19.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "A0000002-0002-0002-0002-000000000002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "FAA airspace layers, offline maps, and full skyAlert device control — synchronized with DroneDAA.",
+              "displayName" : "DroneDAA Pro",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.dronedaa.pro.1yr",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "DroneDAA Pro Annual",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
   ],
   "version" : {
     "major" : 3,

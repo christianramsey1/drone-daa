@@ -91,13 +91,19 @@ public class StoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
 
         Task {
             do {
+                print("[StoreKit] Requesting products: \(productIds)")
                 let products = try await Product.products(for: Set(productIds))
+                print("[StoreKit] Received \(products.count) products:")
+                for p in products {
+                    print("[StoreKit]   - \(p.id): \(p.displayName) \(p.displayPrice) type=\(p.type)")
+                }
+                if products.isEmpty {
+                    print("[StoreKit] WARNING: No products returned. Check: 1) Product ID matches App Store Connect exactly 2) Paid Apps agreement is active 3) Build uploaded to ASC 4) Sandbox account signed in")
+                }
                 let productDicts = products.map { productToDict($0) }
                 call.resolve(["products": productDicts])
             } catch {
-                #if DEBUG
                 print("[StoreKit] Failed to fetch products: \(error)")
-                #endif
                 call.reject("Failed to fetch products: \(error.localizedDescription)")
             }
         }
@@ -262,14 +268,32 @@ public class StoreKitPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @available(iOS 15.0, *)
     private func productToDict(_ product: Product) -> [String: Any] {
-        return [
+        var dict: [String: Any] = [
             "id": product.id,
             "displayName": product.displayName,
             "description": product.description,
             "price": product.price as NSDecimalNumber,
             "displayPrice": product.displayPrice,
-            "currencyCode": product.priceFormatStyle.currencyCode
+            "currencyCode": product.priceFormatStyle.currencyCode,
+            "type": product.type == .autoRenewable ? "autoRenewable" : product.type == .nonConsumable ? "nonConsumable" : "other",
         ]
+
+        if let sub = product.subscription {
+            let unit: String
+            switch sub.subscriptionPeriod.unit {
+            case .day: unit = "day"
+            case .week: unit = "week"
+            case .month: unit = "month"
+            case .year: unit = "year"
+            @unknown default: unit = "unknown"
+            }
+            dict["subscriptionPeriod"] = [
+                "value": sub.subscriptionPeriod.value,
+                "unit": unit,
+            ]
+        }
+
+        return dict
     }
 
     @available(iOS 15.0, *)

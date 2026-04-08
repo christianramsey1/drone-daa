@@ -85,15 +85,16 @@ export function useStore(): UseStoreReturn {
 
       // Load products — add product IDs here as you add paid features
       const productIds = [
-        "com.dronedaa.pass.pro.1y",
+        "com.dronedaa.pro.1yr",
       ];
 
+      console.log("[Store] Requesting products:", productIds);
       const { products: loadedProducts } = await StoreKit.getProducts({
         productIds,
       });
       setProducts(loadedProducts);
       setStatus("ready");
-      console.log("[Store] Initialized with", loadedProducts.length, "products");
+      console.log("[Store] Initialized with", loadedProducts.length, "products:", loadedProducts.map((p: any) => `${p.id} (${p.displayPrice})`));
     } catch (err) {
       console.error("[Store] Failed to initialize:", err);
       setStatus("unavailable");

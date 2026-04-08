@@ -8,7 +8,7 @@
  * Product information from App Store
  */
 export type Product = {
-  id: string; // Product ID (SKU), e.g., "com.dronedaa.pass.pro.1y"
+  id: string; // Product ID (SKU), e.g., "com.dronedaa.pro.1yr"
   displayName: string;
   description: string;
   price: number;

@@ -36,7 +36,7 @@ export function ProPaywall({ onClose }: Props) {
   const { isAuthenticated } = useAuth();
 
   const proProduct = store.getProduct("pro");
-  const priceLabel = proProduct?.displayPrice ?? "$4.99";
+  const priceLabel = proProduct?.displayPrice ?? "$19.99";
 
   return (
     <div style={{
@@ -140,9 +140,12 @@ export function ProPaywall({ onClose }: Props) {
                 marginBottom: 10,
               }}
               disabled={store.purchasing}
-              onClick={() => store.purchasePass("pro")}
+              onClick={async () => {
+                const success = await store.purchasePass("pro");
+                if (success) onClose();
+              }}
             >
-              {store.purchasing ? "Processing…" : `Unlock Pro — ${priceLabel}`}
+              {store.purchasing ? "Processing…" : `Subscribe — ${priceLabel}/year`}
             </button>
             {isNative() && (
               <button
@@ -154,9 +157,12 @@ export function ProPaywall({ onClose }: Props) {
                   cursor: store.restoring ? "default" : "pointer",
                 }}
                 disabled={store.restoring}
-                onClick={() => store.restorePurchases()}
+                onClick={async () => {
+                  const success = await store.restorePurchases();
+                  if (success) onClose();
+                }}
               >
-                {store.restoring ? "Restoring…" : "Restore Purchase"}
+                {store.restoring ? "Restoring…" : "Restore Subscription"}
               </button>
             )}
           </>
@@ -178,7 +184,10 @@ export function ProPaywall({ onClose }: Props) {
         )}
 
         <p style={{ marginTop: 12, fontSize: 10, color: "rgba(255,255,255,0.3)", textAlign: "center", lineHeight: 1.5 }}>
-          One-time purchase. No subscription. Unlocks permanently on all your devices signed in to this Apple ID.
+          Auto-renewable subscription. {priceLabel}/year. Payment is charged to your Apple ID account at confirmation of purchase.
+          Subscription automatically renews unless canceled at least 24 hours before the end of the current period.
+          Your account will be charged for renewal within 24 hours prior to the end of the current period.
+          Manage or cancel subscriptions in your Apple ID account settings.
           <br />
           <a href="https://detectandavoid.com/terms" target="_blank" rel="noopener" style={{ color: "rgba(255,255,255,0.4)" }}>Terms of Service</a>
           {" · "}
