@@ -10,39 +10,14 @@
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
 
-	<!-- APIs accessed and the reason codes -->
+	<!--
+	  NSPrivacyAccessedAPITypes is ONLY for Apple's Required Reason APIs:
+	  UserDefaults, file timestamps, system boot time, disk space, active keyboards.
+	  Location, Bluetooth, and LocalNetwork are NOT Required Reason APIs —
+	  they are declared via Info.plist usage description keys.
+	-->
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
-
-		<!-- Location: show user position on map, proximity alerts -->
-		<dict>
-			<key>NSPrivacyAccessedAPIType</key>
-			<string>NSPrivacyAccessedAPICategoryLocation</string>
-			<key>NSPrivacyAccessedAPITypeReasons</key>
-			<array>
-				<string>3.2</string>
-			</array>
-		</dict>
-
-		<!-- Bluetooth: scan for Remote ID drone broadcasts (ASTM F3411-22a) -->
-		<dict>
-			<key>NSPrivacyAccessedAPIType</key>
-			<string>NSPrivacyAccessedAPICategoryBluetoothAlways</string>
-			<key>NSPrivacyAccessedAPITypeReasons</key>
-			<array>
-				<string>5.1</string>
-			</array>
-		</dict>
-
-		<!-- Local Network: receive ADS-B GDL-90 UDP from on-network receiver -->
-		<dict>
-			<key>NSPrivacyAccessedAPIType</key>
-			<string>NSPrivacyAccessedAPICategoryLocalNetwork</string>
-			<key>NSPrivacyAccessedAPITypeReasons</key>
-			<array>
-				<string>1.0</string>
-			</array>
-		</dict>
 
 		<!-- UserDefaults: persist app settings and user preferences -->
 		<dict>
@@ -66,48 +41,6 @@
 			<string>NSPrivacyCollectedDataTypePreciseLocation</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<false/>
-			<key>NSPrivacyCollectedDataTypeTracking</key>
-			<false/>
-			<key>NSPrivacyCollectedDataTypePurposes</key>
-			<array>
-				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-			</array>
-		</dict>
-
-		<!-- Email address: collected via Sign in with Apple for account identification -->
-		<dict>
-			<key>NSPrivacyCollectedDataType</key>
-			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
-			<key>NSPrivacyCollectedDataTypeLinked</key>
-			<true/>
-			<key>NSPrivacyCollectedDataTypeTracking</key>
-			<false/>
-			<key>NSPrivacyCollectedDataTypePurposes</key>
-			<array>
-				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-			</array>
-		</dict>
-
-		<!-- User ID: Apple Sign In subject, stored server-side for account management -->
-		<dict>
-			<key>NSPrivacyCollectedDataType</key>
-			<string>NSPrivacyCollectedDataTypeUserID</string>
-			<key>NSPrivacyCollectedDataTypeLinked</key>
-			<true/>
-			<key>NSPrivacyCollectedDataTypeTracking</key>
-			<false/>
-			<key>NSPrivacyCollectedDataTypePurposes</key>
-			<array>
-				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-			</array>
-		</dict>
-
-		<!-- Purchase history: StoreKit transactions for entitlement verification -->
-		<dict>
-			<key>NSPrivacyCollectedDataType</key>
-			<string>NSPrivacyCollectedDataTypePurchaseHistory</string>
-			<key>NSPrivacyCollectedDataTypeLinked</key>
-			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
 			<false/>
 			<key>NSPrivacyCollectedDataTypePurposes</key>

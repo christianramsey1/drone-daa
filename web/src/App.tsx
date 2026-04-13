@@ -751,9 +751,10 @@ function SignInScreen() {
 }
 
 export default function App() {
-  const { isAuthenticated, loading: authLoading, signOut, user } = useAuth();
-  const { hasEntitlement } = useEntitlements();
-  const isPro = hasEntitlement("pro");
+  const { isAuthenticated: _isAuth, loading: authLoading, signOut: _signOut, user: _user } = useAuth();
+  const isAuthenticated = true; // FREE LAUNCH: skip auth requirement
+  const { hasEntitlement: _hasEntitlement } = useEntitlements();
+  const isPro = true; // FREE LAUNCH: all features unlocked
   const [showProPaywall, setShowProPaywall] = useState(false);
 
   // Panel state
@@ -2602,7 +2603,7 @@ export default function App() {
 
             {panelTab === "settings" && (
               <div className="panelSection">
-                {/* Account */}
+                {/* Account — hidden for free launch
                 <div className="row" style={{ marginBottom: 4 }}>
                   <span className="rowTitle" style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
                     {user?.email || user?.displayName || "Signed in"}
@@ -2616,6 +2617,7 @@ export default function App() {
                   </button>
                 </div>
                 <div className="divider" />
+                */}
 
                 {/* ADS-B Connection */}
                 <div className="sectionTitle">{isNative() ? "ADS-B Receiver" : "Relay"}</div>

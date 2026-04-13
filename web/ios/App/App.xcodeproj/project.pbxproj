@@ -47,11 +47,11 @@
 		E1A0B0012D5F000000000009 /* AppleSignInPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppleSignInPlugin.m; sourceTree = "<group>"; };
 		E1A0B0012D5F00000000000B /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		E1A0B0012D5F00000000000C /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
-		E1A0B0012D5F00000000001A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		E1A0B0012D5F000000000011 /* GDL90Plugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GDL90Plugin.swift; sourceTree = "<group>"; };
 		E1A0B0012D5F000000000013 /* GDL90Plugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GDL90Plugin.m; sourceTree = "<group>"; };
 		E1A0B0012D5F000000000015 /* RemoteIdPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteIdPlugin.swift; sourceTree = "<group>"; };
 		E1A0B0012D5F000000000017 /* RemoteIdPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RemoteIdPlugin.m; sourceTree = "<group>"; };
+		E1A0B0012D5F00000000001A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -361,7 +361,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = WNS326Z3DK;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
@@ -385,7 +385,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = WNS326Z3DK;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
