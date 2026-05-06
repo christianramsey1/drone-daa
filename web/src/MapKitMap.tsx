@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getApiBaseUrl } from "./platform";
+import { getApiBaseUrl, isNative } from "./platform";
 import {
   createSeamarkIcon,
   createStartWaypointIcon,
@@ -196,13 +196,18 @@ export default function MapKitMap({
         if (!mapRef.current) {
           setStatus("creating map");
 
+          // On iOS native, MapKit JS's showsUserLocation calls navigator.geolocation
+          // inside WKWebView, which triggers the "localhost would like to use your
+          // location" prompt — we render our own blue dot from native CoreLocation
+          // instead. On web, keep the native MapKit blue dot.
+          const native = isNative();
           const mapOptions = {
             region,
             showsCompass: mapkit.FeatureVisibility.Visible,
             showsZoomControl: true,
             showsMapTypeControl: true, // Show satellite/hybrid/standard picker
-            showsUserLocation: true, // Show native blue dot for user location
-            showsUserLocationControl: true, // Show "locate me" button
+            showsUserLocation: !native,
+            showsUserLocationControl: !native,
             isRotationEnabled: true,
             isScrollEnabled: true,
             isZoomEnabled: true,
@@ -212,14 +217,25 @@ export default function MapKitMap({
 
           mapRef.current = new mapkit.Map(elRef.current, mapOptions);
 
-          // Push built-in controls (compass, zoom, map type) below the notch/Dynamic Island
-          // Read CSS custom property set from env(safe-area-inset-top) via getComputedStyle workaround
-          const probe = document.createElement("div");
-          probe.style.cssText = "position:fixed;top:env(safe-area-inset-top,0px);left:0;width:0;height:0;visibility:hidden;";
-          document.body.appendChild(probe);
-          const safeTop = probe.offsetTop || 0;
-          document.body.removeChild(probe);
-          mapRef.current.padding = new mapkit.Padding(Math.max(safeTop, 10), 10, 10, 10);
+          // Push built-in controls (compass, zoom, map type, locate-me) below the
+          // notch / Dynamic Island. Read env(safe-area-inset-top) via a probe
+          // element and reapply on subsequent frames in case layout settles
+          // after map creation.
+          const applyPadding = () => {
+            const probe = document.createElement("div");
+            probe.style.cssText = "position:fixed;top:env(safe-area-inset-top,0px);left:0;width:0;height:0;visibility:hidden;pointer-events:none;";
+            document.body.appendChild(probe);
+            const safeTop = probe.offsetTop || 0;
+            document.body.removeChild(probe);
+            // Minimum 60px clears the iPhone status bar / Dynamic Island.
+            const top = Math.max(safeTop + 8, 60);
+            if (mapRef.current) {
+              mapRef.current.padding = new mapkit.Padding(top, 10, 10, 10);
+            }
+          };
+          applyPadding();
+          requestAnimationFrame(applyPadding);
+          setTimeout(applyPadding, 250);
 
           mapRef.current.addEventListener("error", (evt: any) => {
             console.error("[MapKit] map error event:", evt);

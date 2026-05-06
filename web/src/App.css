@@ -49,6 +49,54 @@ select option {
   z-index: 1;
 }
 
+/* Custom locate-me button — replaces MapKit's built-in showsUserLocationControl
+   on native iOS, where it's disabled to avoid the WKWebView "localhost"
+   geolocation prompt. Positioned in the upper-right next to MapKit's controls. */
+.locateBtn {
+  position: absolute;
+  top: max(10px, calc(env(safe-area-inset-top, 0px) + 8px));
+  right: calc(max(10px, env(safe-area-inset-right, 0px)) + 50px);
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(40, 40, 42, 0.92);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 30;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  padding: 0;
+}
+
+.locateBtn:active {
+  background: rgba(60, 60, 62, 0.95);
+}
+
+.locateBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* uAvionix logo overlaid on the map, upper-left corner.
+   Sits opposite the MapKit control stack (which is in the upper-right),
+   below the Dynamic Island / notch. The side panel covers the left edge
+   when open, so the logo only shows when the panel is closed. */
+.mapLogo {
+  position: absolute;
+  top: max(10px, calc(env(safe-area-inset-top, 0px) + 8px));
+  left: max(10px, env(safe-area-inset-left, 0px));
+  height: 26px;
+  width: auto;
+  z-index: 30;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+}
+
 /* Leaflet controls: respect notch / Dynamic Island safe area */
 .mapLayer .leaflet-top {
   top: max(10px, env(safe-area-inset-top, 0px));
@@ -56,6 +104,7 @@ select option {
 .mapLayer .leaflet-right {
   right: max(10px, env(safe-area-inset-right, 0px));
 }
+
 
 /* Side panel overlay layer */
 .sidePanelLayer {
@@ -132,12 +181,23 @@ select option {
 .panelHeader {
   padding: 14px 14px 10px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .panelTitle {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.panelHeaderLogo {
+  height: 22px;
+  width: auto;
+  flex-shrink: 0;
+  opacity: 0.95;
 }
 
 .panelAppName {

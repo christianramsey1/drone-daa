@@ -14,6 +14,7 @@ import type { DroneTrack } from "./services/remoteId";
 import { broadcastTypeLabel } from "./services/remoteId";
 import { ConnectionWizard } from "./ConnectionWizard";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
+import { Geolocation } from "@capacitor/geolocation";
 import { useSkyAlert, type SkyAlertSettings } from "./services/useSkyAlert";
 import { useAuth } from "./auth/AuthContext";
 import { AppleSignInButton } from "./auth/AppleSignInButton";
@@ -902,21 +903,43 @@ export default function App() {
   // ── GPS tracking ──────────────────────────────────────────────────
 
   useEffect(() => {
+    const handleFix = (lat: number, lon: number, accuracyM: number) => {
+      const loc = { lat, lon, accuracyM };
+      setGps(loc);
+      if (!gpsCenteredRef.current) {
+        gpsCenteredRef.current = true;
+        setMapCenter({ lat, lon });
+      }
+    };
+
+    // Native iOS: use Capacitor Geolocation (CoreLocation) so the system prompt
+    // shows "DroneDAA" with the Info.plist usage description, not "localhost".
+    if (isNative()) {
+      let watchId: string | null = null;
+      let cancelled = false;
+      (async () => {
+        try {
+          await Geolocation.requestPermissions({ permissions: ["location"] });
+          if (cancelled) return;
+          watchId = await Geolocation.watchPosition(
+            { enableHighAccuracy: true, maximumAge: 5000 },
+            (pos, err) => {
+              if (err || !pos) return;
+              handleFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+            }
+          );
+        } catch { /* GPS not available */ }
+      })();
+      return () => {
+        cancelled = true;
+        if (watchId) Geolocation.clearWatch({ id: watchId }).catch(() => {});
+      };
+    }
+
+    // Web: standard browser geolocation
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const loc = {
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-          accuracyM: pos.coords.accuracy,
-        };
-        setGps(loc);
-        // Center map on first GPS fix only
-        if (!gpsCenteredRef.current) {
-          gpsCenteredRef.current = true;
-          setMapCenter({ lat: loc.lat, lon: loc.lon });
-        }
-      },
+      (pos) => handleFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
       () => { /* GPS not available */ },
       { enableHighAccuracy: true, maximumAge: 5000 }
     );
@@ -1121,8 +1144,10 @@ export default function App() {
   const mapAnnotations: Annotation[] = useMemo(() => {
     const result: Annotation[] = [];
 
-    // GPS position dot — only on Leaflet/Topo; Apple Maps shows its own via showsUserLocation
-    if (gps && mapLayer === "topo") {
+    // GPS position dot — render our own on Topo always, and on Apple Maps when
+    // on iOS native (MapKit's built-in blue dot is disabled there to avoid the
+    // WKWebView "localhost" geolocation prompt).
+    if (gps && (mapLayer === "topo" || isNative())) {
       result.push({
         id: "gps-pos",
         lat: gps.lat,
@@ -1421,6 +1446,31 @@ export default function App() {
     <div className="appShell">
       {/* ── Map ── */}
       <div className="mapLayer">
+        <img
+          src="/uavionix-logo.png"
+          alt="uAvionix"
+          className="mapLogo"
+        />
+        {/* Custom locate-me button — replaces MapKit's showsUserLocationControl
+            (disabled on native to avoid the WKWebView "localhost" geolocation prompt) */}
+        {isNative() && (
+          <button
+            className="locateBtn"
+            aria-label="Center on my location"
+            disabled={!gps}
+            onClick={() => {
+              if (gps) setMapCenter({ lat: gps.lat, lon: gps.lon });
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v3" />
+              <path d="M12 19v3" />
+              <path d="M2 12h3" />
+              <path d="M19 12h3" />
+            </svg>
+          </button>
+        )}
         {mapLayer === "apple" ? (
           <MapKitMap
             variant="full"
@@ -1472,6 +1522,11 @@ export default function App() {
               <div className="panelAppName">DroneDAA</div>
               <div className="panelSubtitle">Detect & Avoid</div>
             </div>
+            <img
+              src="/uavionix-logo.png"
+              alt="uAvionix"
+              className="panelHeaderLogo"
+            />
           </div>
 
           {/* Tabs */}
