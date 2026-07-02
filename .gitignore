@@ -57,3 +57,6 @@ relay-app/node_modules/
 nul
 {}
 .env*.local
+
+# Icon/design source packages (emailed artifacts, not repo source)
+DroneDAA_AppIcon_Package.zip

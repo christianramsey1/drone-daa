@@ -1,19 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Dark circle background -->
-  <circle cx="16" cy="16" r="15" fill="#0d0d0d" stroke="#00d1ff" stroke-width="1.5"/>
-  <!-- Drone body (center dot) -->
-  <circle cx="16" cy="16" r="2.5" fill="#00d1ff"/>
-  <!-- Radar arcs -->
-  <path d="M16 8a8 8 0 0 1 8 8" fill="none" stroke="#00d1ff" stroke-width="1.5" stroke-linecap="round" opacity="0.9"/>
-  <path d="M16 5a11 11 0 0 1 11 11" fill="none" stroke="#00d1ff" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
-  <!-- Drone arms -->
-  <line x1="13" y1="13" x2="9" y2="9" stroke="#00d1ff" stroke-width="1" opacity="0.6"/>
-  <line x1="19" y1="13" x2="23" y2="9" stroke="#00d1ff" stroke-width="1" opacity="0.6"/>
-  <line x1="13" y1="19" x2="9" y2="23" stroke="#00d1ff" stroke-width="1" opacity="0.6"/>
-  <line x1="19" y1="19" x2="23" y2="23" stroke="#00d1ff" stroke-width="1" opacity="0.6"/>
-  <!-- Rotor dots -->
-  <circle cx="8.5" cy="8.5" r="1.5" fill="#00d1ff" opacity="0.5"/>
-  <circle cx="23.5" cy="8.5" r="1.5" fill="#00d1ff" opacity="0.5"/>
-  <circle cx="8.5" cy="23.5" r="1.5" fill="#00d1ff" opacity="0.5"/>
-  <circle cx="23.5" cy="23.5" r="1.5" fill="#00d1ff" opacity="0.5"/>
+  <!-- Dark radar background -->
+  <circle cx="16" cy="16" r="15.5" fill="#0a1410"/>
+  <!-- Radar range rings -->
+  <circle cx="16" cy="16" r="14" fill="none" stroke="#1f6b4d" stroke-width="0.6" opacity="0.5"/>
+  <circle cx="16" cy="16" r="9.5" fill="none" stroke="#1f6b4d" stroke-width="0.6" opacity="0.5"/>
+  <circle cx="16" cy="16" r="5" fill="none" stroke="#1f6b4d" stroke-width="0.6" opacity="0.5"/>
+  <!-- Green detect-and-avoid maneuver arc with arrowhead -->
+  <path d="M12.5 22.5 A 7 7 0 1 1 20 10" fill="none" stroke="#3ee6a0" stroke-width="2" stroke-linecap="round"/>
+  <path d="M20 10 l-3.2 0.4 l1.6 2.8 z" fill="#3ee6a0"/>
+  <!-- Red conflict target -->
+  <circle cx="21" cy="11.5" r="3" fill="none" stroke="#d51c29" stroke-width="1.2"/>
+  <rect x="19.6" y="10.1" width="2.8" height="2.8" fill="#d51c29" transform="rotate(45 21 11.5)"/>
 </svg>
