@@ -787,8 +787,51 @@ export default function App() {
   const hourly = weatherData?.hourly ?? [];
   const nextHour = weatherData?.nextHour ?? null;
 
+  // Compact weather summary for the HUD pill. Text-only — emojis render
+  // inconsistently on iOS and overflow the pill on iPhone; units identify
+  // each metric, separators are thin middots.
+  const wxSummary = useMemo(() => {
+    if (!weather) return "";
+    const parts: string[] = [];
+    if (weather.temperature_2m != null) parts.push(`${Math.round(weather.temperature_2m)}°F`);
+    if (weather.wind_speed_10m != null)
+      parts.push(`${Math.round(weather.wind_speed_10m)}${weather.wind_gusts_10m != null ? `→${Math.round(weather.wind_gusts_10m)}` : ""} mph`);
+    if (weather.visibility != null) parts.push(`${Math.round(weather.visibility / 1609.34)} mi`);
+    return parts.slice(0, 3).join("  ·  ");
+  }, [weather]);
+
+  // Next-hour precip alert — replaces the pill summary and turns it amber
+  // (caution) when rain is imminent; red is reserved for worse in aviation.
+  const precipAlert = useMemo(() => {
+    const mins = nextHour?.minutes;
+    if (!mins || mins.length === 0) return null;
+    const precipStartIdx = mins.findIndex((m) => (m.precipitationChance ?? 0) > 30);
+    const currentlyPrecip = mins[0]?.precipitationChance != null && mins[0].precipitationChance > 30;
+    if (currentlyPrecip) return "🌧️ Precipitation now";
+    if (precipStartIdx > 0 && precipStartIdx <= 60) return `🌧️ Rain in ~${precipStartIdx} min`;
+    return null;
+  }, [nextHour]);
+
   // ADS-B
   const adsb = useAdsb();
+
+  // skyEcho GDL90 packet age for the latency HUD pill. Re-render every 500ms
+  // so the age counts up between 1Hz snapshots. Gated on receiverConnected
+  // (packet within the last 5s) so the pill disappears when the receiver
+  // drops instead of counting up forever.
+  const showLatency = adsb.lastPacketAt != null && adsb.receiverConnected;
+  const [, setLatencyTick] = useState(0);
+  useEffect(() => {
+    if (!showLatency) return;
+    const id = setInterval(() => setLatencyTick((t) => t + 1), 500);
+    return () => clearInterval(id);
+  }, [showLatency]);
+  const latencyMs = adsb.lastPacketAt != null && adsb.receiverConnected
+    ? Math.max(0, Date.now() - adsb.lastPacketAt)
+    : null;
+  const latencyColor = latencyMs == null ? "#888"
+    : latencyMs < 1000 ? "#30d158" : latencyMs < 5000 ? "#ffd60a" : "#ff453a";
+
   const skyAlert = useSkyAlert(adsb.status === "connected" || adsb.status === "receiving");
   const [skyEdits, setSkyEdits] = useState<Partial<SkyAlertSettings> | null>(null);
   // Merge device settings with local edits
@@ -3121,39 +3164,54 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── HUD Pills (bottom-center) ── */}
+      {/* ── HUD Pills (bottom-left; bottom-right corner reserved for MapKit legal link) ── */}
       <div
         className="hudPills"
         style={{
           position: "absolute",
-          bottom: 16,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 30,
+          bottom: 10,
+          left: 10,
+          zIndex: 35,
           display: "flex",
           gap: 8,
+          alignItems: "flex-end",
+          flexWrap: "wrap-reverse",
+          maxWidth: "calc(100vw - 150px)",
         }}
       >
-        {/* Weather pill */}
+        {/* Latency pill — packet age of the skyEcho GDL90 feed */}
+        {latencyMs != null && (
+          <div
+            className="pill"
+            onClick={() => { setPanelTab("adsb"); setPanelOpen(true); }}
+            style={{ border: `1.5px solid ${latencyColor}` }}
+          >
+            <span style={{
+              color: latencyColor,
+              fontWeight: 600,
+              fontSize: 11,
+              fontFamily: "'SF Mono',Consolas,monospace",
+              fontVariantNumeric: "tabular-nums",
+            }}>
+              {(latencyMs / 1000).toFixed(1)}s latency
+            </span>
+          </div>
+        )}
+
+        {/* Weather pill — compact summary; amber when precip is imminent */}
         <div
           className="pill"
           onClick={() => { setPanelTab("weather"); setPanelOpen(true); }}
-          style={{ whiteSpace: "nowrap" }}
+          style={precipAlert
+            ? { background: "rgba(245,197,24,0.92)", border: "1px solid #f5c518" }
+            : { border: "1.5px solid rgba(255,255,255,0.30)" }}
         >
           {weatherLoading && !weather ? (
             <span style={{ opacity: 0.5 }}>Loading...</span>
-          ) : weather ? (
-            <>
-              {weather.temperature_2m != null && (
-                <span>{"\uD83C\uDF21"} {Math.round(weather.temperature_2m)} °F</span>
-              )}
-              {weather.wind_speed_10m != null && (
-                <span> {"\u00B7"} {"\uD83C\uDF2C\uFE0F"} {Math.round(weather.wind_speed_10m)} mph{weather.wind_gusts_10m != null ? ` (g ${Math.round(weather.wind_gusts_10m)} mph)` : ""}</span>
-              )}
-              {weather.visibility != null && (
-                <span> {"\u00B7"} {"\uD83D\uDC41"} {formatVisibility(weather.visibility)}</span>
-              )}
-            </>
+          ) : (precipAlert || wxSummary) ? (
+            <span style={{ color: precipAlert ? "#1a1a1a" : "#fff", fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>
+              {precipAlert || wxSummary}
+            </span>
           ) : (
             <span style={{ opacity: 0.5 }}>No weather</span>
           )}

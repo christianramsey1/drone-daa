@@ -12,6 +12,8 @@ export interface GDL90Snapshot {
   aircraft: AircraftTrack[];
   count: number;
   timestamp: number;
+  /** ms-epoch arrival time of the last UDP packet from the receiver, or null if none yet */
+  lastPacketAt?: number | null;
 }
 
 export interface GDL90PluginInterface {

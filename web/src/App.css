@@ -119,7 +119,11 @@ select option {
   pointer-events: auto;
   position: absolute;
   top: max(10px, env(safe-area-inset-top, 0px));
-  bottom: 10px;
+  /* Stop above the bottom-left HUD pills so an open panel doesn't cover them.
+     Wide screens show a single pill row → tighter gap here; phones (≤600px)
+     can wrap the pills to a 2nd row → taller clearance in the mobile media
+     query below. */
+  bottom: 56px;
   left: 10px;
   width: var(--panel-w);
   background: var(--panel-bg);
@@ -600,15 +604,11 @@ select option {
 .hudPills {
   /* App.tsx sets inline positioning; add safe area for iOS home indicator */
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  /* Prevent pills from exceeding screen width */
-  max-width: calc(100vw - 20px);
-  flex-wrap: wrap;
-  justify-content: center;
 }
 
 .pill {
   user-select: none;
-  padding: 13px 16px;
+  padding: 6px 14px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.20);
   background: rgba(0, 0, 0, 0.65);
@@ -616,9 +616,8 @@ select option {
   -webkit-backdrop-filter: blur(10px);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.30);
   color: rgba(255, 255, 255, 0.92);
-  font-size: 14px;
+  font-size: 12px;
   cursor: pointer;
-  min-height: 44px;
   display: flex;
   align-items: center;
 }
@@ -755,6 +754,8 @@ select option {
   .sidePanel {
     width: calc(100vw - 50px);
     max-width: 340px;
+    /* Phones can wrap the HUD pills to 2 rows — clear the taller stack. */
+    bottom: 88px;
   }
 
   /* Smaller panel text on mobile */

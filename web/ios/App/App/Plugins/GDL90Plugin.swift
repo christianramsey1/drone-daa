@@ -256,10 +256,13 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
 
     private func buildSnapshot() -> [String: Any] {
         let receiverConnected: Bool
+        let lastPacketAt: Any
         if let lastUdp = lastUdpReceived {
             receiverConnected = Date().timeIntervalSince(lastUdp) < 5.0
+            lastPacketAt = lastUdp.timeIntervalSince1970 * 1000
         } else {
             receiverConnected = false
+            lastPacketAt = NSNull()
         }
         return [
             "receiverConnected": receiverConnected,
@@ -268,6 +271,7 @@ public class GDL90Plugin: CAPPlugin, CAPBridgedPlugin {
             "aircraft": Array(aircraftMap.values),
             "count": aircraftMap.count,
             "timestamp": Date().timeIntervalSince1970 * 1000,
+            "lastPacketAt": lastPacketAt,
         ]
     }
 

@@ -20,6 +20,8 @@ export type AdsbState = {
   gpsValid: boolean;
   count: number;
   lastUpdate: number | null;
+  /** ms-epoch arrival time of the last UDP packet from the skyEcho receiver */
+  lastPacketAt: number | null;
   /** Diagnostic: the WebSocket URL being used */
   wsUrl: string;
   /** Diagnostic: last error or close reason */
@@ -34,6 +36,7 @@ const INITIAL_STATE: AdsbState = {
   gpsValid: false,
   count: 0,
   lastUpdate: null,
+  lastPacketAt: null,
   wsUrl: "",
   lastError: null,
 };
@@ -94,6 +97,7 @@ export function useAdsb(): AdsbState {
             gpsValid: snapshot.gpsValid,
             count: snapshot.count,
             lastUpdate: snapshot.timestamp,
+            lastPacketAt: snapshot.lastPacketAt ?? null,
             wsUrl: "native://gdl90",
             lastError: null,
           });
@@ -136,6 +140,7 @@ export function useAdsb(): AdsbState {
             gpsValid: snapshot.gpsValid,
             count: snapshot.count,
             lastUpdate: snapshot.timestamp,
+            lastPacketAt: snapshot.lastPacketAt ?? null,
           }));
         }
       } catch {

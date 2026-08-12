@@ -234,6 +234,7 @@ function buildSnapshot() {
   return {
     type: "snapshot",
     timestamp: Date.now(),
+    lastPacketAt: lastUdpReceived || null,
     receiverConnected: (Date.now() - lastUdpReceived) < 5000,
     gpsValid: heartbeat.gpsValid,
     ownship: ownship ? trackToJson(ownship) : null,
