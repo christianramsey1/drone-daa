@@ -1638,7 +1638,7 @@ export default function App() {
                       className="chipBtn"
                       disabled={!isPro || !!downloadProgress?.downloading}
                       onClick={async () => {
-                        const { downloadTilesForArea, getCacheStats, cacheFaaLayer } = await import("./services/offlineTiles");
+                        const { downloadTilesForArea, getCacheStats, cacheFaaLayer, TOPO_URL_TEMPLATE } = await import("./services/offlineTiles");
                         const { FAA_LAYERS: allLayers, fetchAirspace: fetchAir, fetchObstructions: fetchObs } = await import("./services/airspace");
                         const abort = new AbortController();
                         downloadAbortRef.current = abort;
@@ -1654,7 +1654,7 @@ export default function App() {
                         try {
                           // Download map tiles
                           await downloadTilesForArea(bbox, zoomMin, zoomMax,
-                            "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+                            TOPO_URL_TEMPLATE,
                             (downloaded, total, failed) => {
                               setDownloadProgress({ downloading: true, downloaded, total, failed });
                             },

@@ -1,4 +1,4 @@
-// web/src/LeafletMap.tsx — Leaflet-based map for OpenTopoMap (online + offline)
+// web/src/LeafletMap.tsx — Leaflet-based map for the USGS topo layer (online + offline)
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -14,6 +14,7 @@ import {
   getBreadcrumbDotUrl,
 } from "./mapIcons";
 import { CachedTileLayer } from "./services/CachedTileLayer";
+import { TOPO_URL_TEMPLATE, TOPO_MAX_NATIVE_ZOOM, TOPO_ATTRIBUTION } from "./services/offlineTiles";
 
 type Props = {
   variant?: "full" | "mini";
@@ -70,13 +71,14 @@ export default function LeafletMap({
       attributionControl: true,
     });
 
-    // Use cached tile layer for OpenTopoMap
+    // Cached tile layer for the USGS topo base map (see TOPO_URL_TEMPLATE)
     const tileLayer = new CachedTileLayer(
-      "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+      TOPO_URL_TEMPLATE,
       {
+        // USGS serves up to zoom 16; overzoom by scaling for one more level
+        maxNativeZoom: TOPO_MAX_NATIVE_ZOOM,
         maxZoom: 17,
-        subdomains: "abc",
-        attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
+        attribution: TOPO_ATTRIBUTION,
       },
     );
     tileLayer.addTo(map);

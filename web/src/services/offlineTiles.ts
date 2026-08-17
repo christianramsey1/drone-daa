@@ -1,9 +1,32 @@
 // web/src/services/offlineTiles.ts — IndexedDB tile caching for offline topo maps
 
 const DB_NAME = "dronedaa-tiles";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = "tiles";
 const FAA_STORE_NAME = "faaLayers";
+
+/**
+ * Topo base-layer tile source: USGS The National Map. Government-run with no
+ * community rate limits — OpenTopoMap (the previous source) throttles heavily
+ * and was dropping tile swaths on iPhone/iPad. US-only coverage, which is all
+ * an FAA-focused app needs. Note the {z}/{y}/{x} path order, native max zoom 16.
+ */
+export const TOPO_URL_TEMPLATE =
+  "https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}";
+export const TOPO_MAX_NATIVE_ZOOM = 16;
+export const TOPO_ATTRIBUTION =
+  '&copy; <a href="https://www.usgs.gov/">USGS</a> The National Map';
+
+/**
+ * Fetch to use for tile downloads. With CapacitorHttp enabled, Capacitor
+ * replaces window.fetch with a native-bridge version that base64-marshals
+ * every response across the JS bridge — far too slow for image tiles, and
+ * it starves the map on iPhone/iPad. Capacitor keeps the original WKWebView
+ * fetch as window.CapacitorWebFetch; tiles use it directly (the USGS tile
+ * server sends Access-Control-Allow-Origin: *, so plain CORS works).
+ */
+export const tileFetch: typeof fetch =
+  ((window as unknown as { CapacitorWebFetch?: typeof fetch }).CapacitorWebFetch ?? window.fetch).bind(window);
 
 let _db: IDBDatabase | null = null;
 
@@ -11,8 +34,13 @@ function openTileDb(): Promise<IDBDatabase> {
   if (_db) return Promise.resolve(_db);
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (e) => {
       const db = req.result;
+      // v3: topo provider switched OpenTopoMap → USGS. Drop stale tiles so
+      // cached imagery matches the live layer; users re-download offline areas.
+      if (e.oldVersion > 0 && e.oldVersion < 3 && db.objectStoreNames.contains(STORE_NAME)) {
+        db.deleteObjectStore(STORE_NAME);
+      }
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: "key" });
       }
@@ -155,7 +183,7 @@ export async function downloadTilesForArea(
           .replace("{x}", String(x))
           .replace("{y}", String(y));
 
-        const res = await fetch(url, { signal: abortSignal });
+        const res = await tileFetch(url, { signal: abortSignal });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const blob = await res.blob();
         await cacheTile(z, x, y, blob);
