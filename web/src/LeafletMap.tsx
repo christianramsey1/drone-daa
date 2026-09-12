@@ -32,6 +32,31 @@ type Props = {
 
 const DEFAULT_CENTER = { lat: 37.093, lon: -79.671 };
 
+/**
+ * Tile layer whose URLs come from a function rather than a template — needed
+ * for WMS sources like the NWS radar mosaic, where each tile is a bbox query.
+ */
+class FnTileLayer extends L.TileLayer {
+  private urlFn: (x: number, y: number, z: number) => string;
+
+  constructor(
+    urlFn: (x: number, y: number, z: number) => string,
+    options?: L.TileLayerOptions,
+  ) {
+    super("", options);
+    this.urlFn = urlFn;
+  }
+
+  setUrlFn(urlFn: (x: number, y: number, z: number) => string) {
+    this.urlFn = urlFn;
+    this.redraw();
+  }
+
+  getTileUrl(coords: L.Coords): string {
+    return this.urlFn(coords.x, coords.y, coords.z);
+  }
+}
+
 export default function LeafletMap({
   variant = "full",
   center,
@@ -411,6 +436,7 @@ export default function LeafletMap({
 
   // Update tile overlays
   const tileOverlayMapRef = useRef<Map<string, L.TileLayer>>(new Map());
+  const tileOverlayVersionRef = useRef<Map<string, number | string | undefined>>(new Map());
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -425,14 +451,38 @@ export default function LeafletMap({
       }
     });
 
-    // Add new
+    // Add new, or re-point an existing layer (radar changes its URL on each
+    // refresh, so the same id must be able to change source without a flash).
     tileOverlays.forEach((t) => {
-      if (tileOverlayMapRef.current.has(t.id)) return;
-      const layer = L.tileLayer(t.urlTemplate, {
+      const existing = tileOverlayMapRef.current.get(t.id);
+      if (existing) {
+        if (t.tileUrlFn && existing instanceof FnTileLayer) {
+          if (tileOverlayVersionRef.current.get(t.id) !== t.version) {
+            tileOverlayVersionRef.current.set(t.id, t.version);
+            existing.setUrlFn(t.tileUrlFn);
+          }
+        } else if (
+          t.urlTemplate &&
+          (existing as L.TileLayer & { _url?: string })._url !== t.urlTemplate
+        ) {
+          existing.setUrl(t.urlTemplate);
+        }
+        existing.setOpacity(t.opacity ?? 0.7);
+        return;
+      }
+
+      const options: L.TileLayerOptions = {
         opacity: t.opacity ?? 0.7,
-        minZoom: 5,
-        maxZoom: 12,
-      }).addTo(map);
+        minZoom: t.minZoom ?? 5,
+        maxZoom: t.maxZoom ?? 12,
+        // Upscale past the source's real limit instead of asking for tiles
+        // it won't render (the NWS radar mosaic is empty above z8).
+        ...(t.maxNativeZoom != null ? { maxNativeZoom: t.maxNativeZoom } : null),
+      };
+      const layer = t.tileUrlFn
+        ? new FnTileLayer(t.tileUrlFn, options).addTo(map)
+        : L.tileLayer(t.urlTemplate ?? "", options).addTo(map);
+      tileOverlayVersionRef.current.set(t.id, t.version);
       tileOverlayMapRef.current.set(t.id, layer);
     });
   }, [tileOverlays]);

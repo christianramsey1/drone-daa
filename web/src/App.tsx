@@ -18,6 +18,7 @@ import { Geolocation } from "@capacitor/geolocation";
 import { useSkyAlert, type SkyAlertSettings } from "./services/useSkyAlert";
 import { useMetar, useTaf } from "./services/useMetar";
 import { decodeMetar, decodeTaf, flightCategoryColor, ceilingFt, ktToMph } from "./services/metar";
+import { radarTileUrl, RADAR_REFRESH_MS, RADAR_OPACITY, RADAR_ATTRIBUTION, RADAR_LEGEND, RADAR_MAX_NATIVE_ZOOM } from "./services/radar";
 import { useAuth } from "./auth/AuthContext";
 import { AppleSignInButton } from "./auth/AppleSignInButton";
 import { useEntitlements } from "./entitlements";
@@ -98,6 +99,7 @@ const DEFAULT_ALERT_VOLUMES: AlertVolumeSettings = {
 
 const ALERT_VOLUMES_KEY = "dronedaa.alertVolumes";
 const WX_SOURCE_KEY = "dronedaa.wxSource";
+const RADAR_KEY = "dronedaa.radarEnabled";
 
 function loadAlertVolumes(): AlertVolumeSettings {
   try {
@@ -458,6 +460,22 @@ function AdsbStatusBadge({ status, gpsValid, native }: {
   );
 }
 
+/**
+ * Every weather source — Apple Weather, METAR, TAF, radar — needs internet.
+ * In the field the usual cause of failure is being joined to the receiver's
+ * Wi-Fi hotspot, which carries traffic but no internet path, so name that
+ * explicitly rather than leaving the user to guess.
+ */
+function WeatherOfflineNotice({ what }: { what: string }) {
+  return (
+    <p className="smallMuted" style={{ lineHeight: 1.5 }}>
+      {what} requires an internet connection. If this device is connected to your
+      receiver's Wi-Fi hotspot, that network has no internet path — switch to Wi-Fi
+      or cellular to load weather, then back to the receiver for traffic.
+    </p>
+  );
+}
+
 function AircraftCard({ aircraft, distNm, alertLevel }: {
   aircraft: AircraftTrack;
   distNm?: number;
@@ -800,6 +818,22 @@ export default function App() {
   }, [wxSource]);
   /** ICAO of the station the user picked; null = use the nearest. */
   const [metarStationId, setMetarStationId] = useState<string | null>(null);
+
+  // NWS radar precipitation overlay (map layer, off by default)
+  const [radarEnabled, setRadarEnabled] = useState<boolean>(() => {
+    try { return localStorage.getItem(RADAR_KEY) === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(RADAR_KEY, radarEnabled ? "1" : "0"); } catch { /* private browsing */ }
+  }, [radarEnabled]);
+  /** Bumped on a timer so placed radar tiles re-fetch the latest frame. */
+  const [radarFrame, setRadarFrame] = useState(() => Date.now());
+  useEffect(() => {
+    if (!radarEnabled) return;
+    setRadarFrame(Date.now());
+    const id = setInterval(() => setRadarFrame(Date.now()), RADAR_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [radarEnabled]);
 
   const weather = weatherData?.current ?? null;
   const hourly = weatherData?.hourly ?? [];
@@ -1463,9 +1497,25 @@ export default function App() {
   // ── Tile overlays (VFR Sectional chart) ─────────────────────────
   const VFR_SECTIONAL_URL = "https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}";
   const mapTileOverlays: import("./MapKitMap").TileOverlayConfig[] = useMemo(() => {
-    if (!vfrSectionalEnabled) return [];
-    return [{ id: "vfr-sectional", urlTemplate: VFR_SECTIONAL_URL, opacity: 0.7 }];
-  }, [vfrSectionalEnabled]);
+    const overlays: import("./MapKitMap").TileOverlayConfig[] = [];
+    if (vfrSectionalEnabled) {
+      overlays.push({ id: "vfr-sectional", urlTemplate: VFR_SECTIONAL_URL, opacity: 0.7 });
+    }
+    if (radarEnabled) {
+      // Radar last so precipitation draws over the sectional. Wider zoom
+      // range than the chart — weather matters at every scale.
+      overlays.push({
+        id: "nws-radar",
+        tileUrlFn: (x, y, z) => radarTileUrl(x, y, z, radarFrame),
+        opacity: RADAR_OPACITY,
+        minZoom: 3,
+        maxZoom: 18,
+        maxNativeZoom: RADAR_MAX_NATIVE_ZOOM,
+        version: radarFrame,
+      });
+    }
+    return overlays;
+  }, [vfrSectionalEnabled, radarEnabled, radarFrame]);
 
   // ── Derived ─────────────────────────────────────────────────────
 
@@ -2441,6 +2491,41 @@ export default function App() {
                   </p>
                 )}
 
+                {/* Radar overlay — a map layer, independent of the panel source below */}
+                <div className="row">
+                  <div>
+                    <div className="rowTitle">Precipitation Radar</div>
+                    <div className="rowSub">NWS national mosaic, on the map</div>
+                  </div>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={radarEnabled}
+                      onChange={() => setRadarEnabled((v) => !v)}
+                    />
+                    <span className="slider" />
+                  </label>
+                </div>
+                {radarEnabled && (
+                  <div className="kv" style={{ gap: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {RADAR_LEGEND.map((band) => (
+                        <div key={band.label} style={{ flex: 1, textAlign: "center" }}>
+                          <div style={{ height: 6, borderRadius: 3, background: band.color }} />
+                          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.45)", marginTop: 3 }}>
+                            {band.label}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
+                      {RADAR_ATTRIBUTION} · updates every few minutes · needs internet
+                    </div>
+                  </div>
+                )}
+
+                <div className="divider" />
+
                 {/* Source: Apple forecast vs official aviation observation */}
                 <div className="row">
                   <span className="rowTitle">Source</span>
@@ -2591,7 +2676,7 @@ export default function App() {
                     </div>
                   </>
                 ) : (
-                  <p className="smallMuted">Weather data unavailable.</p>
+                  <WeatherOfflineNotice what="Apple Weather" />
                   )
                 )}
 
@@ -2599,12 +2684,7 @@ export default function App() {
                   metar.loading && !metar.stations.length ? (
                     <p className="smallMuted">Finding nearby reporting stations...</p>
                   ) : metar.error && !selectedMetar ? (
-                    <p className="smallMuted" style={{ lineHeight: 1.5 }}>
-                      Couldn't reach the aviation weather service. METAR requires internet —
-                      if you're connected to your receiver's Wi-Fi hotspot, that network has
-                      no internet path. Switch to Wi-Fi or cellular to load weather, then back
-                      to the receiver for traffic.
-                    </p>
+                    <WeatherOfflineNotice what="METAR" />
                   ) : !selectedMetar ? (
                     <p className="smallMuted">No reporting stations found nearby.</p>
                   ) : (
@@ -2728,7 +2808,7 @@ export default function App() {
                           publish forecasts. Try a nearby station above.
                         </p>
                       ) : taf.error ? (
-                        <p className="smallMuted">Forecast unavailable: {taf.error}</p>
+                        <WeatherOfflineNotice what="The TAF forecast" />
                       ) : taf.taf ? (
                         <>
                           {/* Decoded periods — the active one is highlighted */}

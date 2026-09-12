@@ -50,8 +50,25 @@ export type Polyline = {
 
 export type TileOverlayConfig = {
   id: string;
-  urlTemplate: string; // e.g., "https://.../{z}/{x}/{y}.png"
+  /** e.g. "https://.../{z}/{x}/{y}.png" — omit when using tileUrlFn. */
+  urlTemplate?: string;
+  /**
+   * Builds the URL for one tile. Needed by sources that aren't plain XYZ —
+   * the NWS radar mosaic is WMS, so each tile is a bbox query.
+   */
+  tileUrlFn?: (x: number, y: number, z: number) => string;
   opacity?: number;
+  /** Zoom range this overlay serves tiles for. Defaults suit the VFR sectional. */
+  minZoom?: number;
+  maxZoom?: number;
+  /**
+   * Deepest zoom the source actually has imagery for; past it the map scales
+   * these tiles up rather than requesting empty ones. The NWS radar mosaic
+   * stops rendering above z8.
+   */
+  maxNativeZoom?: number;
+  /** Bump to force already-placed tiles to re-fetch (radar refresh). */
+  version?: number | string;
 };
 
 type Props = {
@@ -628,6 +645,8 @@ export default function MapKitMap({
 
   // Update tile overlays
   const tileOverlayMapRef = useRef<Map<string, any>>(new Map());
+  /** Live config per overlay id — read by each overlay's URL callback. */
+  const tileOverlayCfgRef = useRef<Map<string, TileOverlayConfig>>(new Map());
   useEffect(() => {
     if (!mapRef.current || !window.mapkit || status !== "ready") return;
     const map = mapRef.current;
@@ -643,23 +662,39 @@ export default function MapKitMap({
     toRemove.forEach((id) => {
       map.removeTileOverlay(tileOverlayMapRef.current.get(id));
       tileOverlayMapRef.current.delete(id);
+      tileOverlayCfgRef.current.delete(id);
     });
 
     // Add new — tile overlays use addTileOverlay(), not addOverlay()
     tileOverlays.forEach((t) => {
-      if (tileOverlayMapRef.current.has(t.id)) return;
+      const existing = tileOverlayMapRef.current.get(t.id);
+      if (existing) {
+        // The URL callback reads the live config from this ref, so a radar
+        // refresh only needs the ref updated plus a reload — no re-add flicker.
+        const prev = tileOverlayCfgRef.current.get(t.id);
+        if (prev?.urlTemplate !== t.urlTemplate || prev?.version !== t.version) {
+          tileOverlayCfgRef.current.set(t.id, t);
+          try { existing.reload(); } catch { /* older MapKit builds */ }
+        }
+        return;
+      }
       try {
+        tileOverlayCfgRef.current.set(t.id, t);
         const overlay = new mk.TileOverlay(
           (x: number, y: number, z: number, _scale: number, _data: any) => {
-            return t.urlTemplate
+            const cfg = tileOverlayCfgRef.current.get(t.id) ?? t;
+            if (cfg.tileUrlFn) return cfg.tileUrlFn(x, y, z);
+            return (cfg.urlTemplate ?? "")
               .replace("{x}", String(x))
               .replace("{y}", String(y))
               .replace("{z}", String(z));
           },
         );
         overlay.opacity = t.opacity ?? 0.7;
-        overlay.minimumZ = 5;
-        overlay.maximumZ = 11;
+        overlay.minimumZ = t.minZoom ?? 5;
+        // MapKit scales tiles beyond maximumZ rather than requesting deeper
+        // ones, so cap at the source's real limit when it has one.
+        overlay.maximumZ = t.maxNativeZoom ?? t.maxZoom ?? 11;
         map.addTileOverlay(overlay);
         tileOverlayMapRef.current.set(t.id, overlay);
         console.log("[MapKit] Added tile overlay:", t.id);
