@@ -78,6 +78,8 @@ type AlertVolumeSettings = {
   innerCeilingFt: number;
   soundEnabled: boolean;
   hapticEnabled: boolean;
+  /** Suppress alerts for aircraft reporting on-ground (GDL-90 misc airborne bit) */
+  ignoreGroundTraffic: boolean;
 };
 
 const DEFAULT_ALERT_VOLUMES: AlertVolumeSettings = {
@@ -89,6 +91,7 @@ const DEFAULT_ALERT_VOLUMES: AlertVolumeSettings = {
   innerCeilingFt: 1500,
   soundEnabled: true,
   hapticEnabled: true,
+  ignoreGroundTraffic: false,
 };
 
 const ALERT_VOLUMES_KEY = "dronedaa.alertVolumes";
@@ -1104,7 +1107,11 @@ export default function App() {
       return {
         ...ac,
         _distNm: d,
-        _alertLevel: computeAlertLevel(d, ac.altFt, alertVolumes),
+        // Aircraft taxiing near an airport shouldn't page the operator —
+        // ground state comes from the GDL-90 traffic report's airborne bit.
+        _alertLevel: alertVolumes.ignoreGroundTraffic && ac.onGround
+          ? "normal" as const
+          : computeAlertLevel(d, ac.altFt, alertVolumes),
       };
     });
     if (center) list.sort((a, b) => (a._distNm ?? 99999) - (b._distNm ?? 99999));
@@ -1820,6 +1827,17 @@ export default function App() {
                       type="checkbox"
                       checked={alertVolumes.hapticEnabled}
                       onChange={() => setAlertVolumes((s) => ({ ...s, hapticEnabled: !s.hapticEnabled }))}
+                    />
+                    <span className="slider" />
+                  </label>
+                </div>
+                <div className="row">
+                  <span className="rowTitle">Ignore Ground Traffic</span>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={alertVolumes.ignoreGroundTraffic}
+                      onChange={() => setAlertVolumes((s) => ({ ...s, ignoreGroundTraffic: !s.ignoreGroundTraffic }))}
                     />
                     <span className="slider" />
                   </label>
