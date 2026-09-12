@@ -10,14 +10,20 @@
 // on the topo layer and MapKit on the Apple layer.
 
 const NWS_RADAR_WMS =
-  "https://mapservices.weather.noaa.gov/eventdriven/services/radar/radar_base_reflectivity/MapServer/WMSServer";
+  "https://nowcoast.noaa.gov/geoserver/observations/weather_radar/ows";
 
 /**
- * Sublayer "1" is the mosaic that actually renders pixels. Sublayer "3"
- * returns a valid but fully transparent PNG — verified by counting opaque
- * pixels, not just by getting a 200 back.
+ * All US regions (CONUS plus Alaska, Hawaii, Caribbean, Guam).
+ *
+ * NOTE: NOAA publishes this mosaic through two different services, and the
+ * other one is a trap — mapservices.weather.noaa.gov (IDP) renders nothing
+ * above about z8 and returns ~80 KB tiles, so at this app's zoom levels it
+ * showed a heavily upscaled blur. nowCOAST serves real detail to z15 at
+ * roughly a tenth the bytes. Both were checked by counting opaque pixels,
+ * and this one's georeferencing was cross-checked against an independent
+ * NEXRAD renderer on storm-edge tiles.
  */
-const NWS_RADAR_LAYER = "1";
+const NWS_RADAR_LAYER = "base_reflectivity_mosaic";
 
 /** Half the circumference of the Web Mercator world, in meters. */
 const MERCATOR_EXTENT = 20037508.342789244;
@@ -45,7 +51,7 @@ export function radarTileUrl(
   const { minX, minY, maxX, maxY } = tileBboxMercator(z, x, y);
   const params = new URLSearchParams({
     service: "WMS",
-    version: "1.1.1",
+    version: "1.3.0",
     request: "GetMap",
     layers: NWS_RADAR_LAYER,
     styles: "",
@@ -53,7 +59,9 @@ export function radarTileUrl(
     transparent: "true",
     width: "256",
     height: "256",
-    srs: "EPSG:3857",
+    // EPSG:3857 is a projected CRS, so 1.3.0 keeps easting/northing order —
+    // no axis swap to worry about (verified against a second radar source).
+    crs: "EPSG:3857",
     bbox: `${minX},${minY},${maxX},${maxY}`,
     frame: String(refreshToken),
   });
@@ -61,11 +69,11 @@ export function radarTileUrl(
 }
 
 /**
- * The service renders this mosaic only down to about z8 — beyond that it
- * returns valid-but-empty PNGs (verified by pixel-counting from z5 to z13).
- * Maps upscale these tiles for closer zooms instead of requesting nothing.
+ * Radar resolution is about 1 km, so z12 already exceeds what the data can
+ * actually resolve; past it the maps upscale rather than fetching more tiles
+ * that carry no extra information.
  */
-export const RADAR_MAX_NATIVE_ZOOM = 8;
+export const RADAR_MAX_NATIVE_ZOOM = 12;
 
 /** The mosaic updates every few minutes. */
 export const RADAR_REFRESH_MS = 4 * 60 * 1000;
@@ -73,7 +81,7 @@ export const RADAR_REFRESH_MS = 4 * 60 * 1000;
 /** Matches defender — dense enough to read, light enough to see the map. */
 export const RADAR_OPACITY = 0.55;
 
-export const RADAR_ATTRIBUTION = "NOAA / NWS";
+export const RADAR_ATTRIBUTION = "NOAA / NWS nowCOAST";
 
 /** Reflectivity bands, in the order a storm builds. */
 export const RADAR_LEGEND: Array<{ label: string; color: string }> = [
