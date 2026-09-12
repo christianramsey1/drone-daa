@@ -16,6 +16,8 @@ import { ConnectionWizard } from "./ConnectionWizard";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { Geolocation } from "@capacitor/geolocation";
 import { useSkyAlert, type SkyAlertSettings } from "./services/useSkyAlert";
+import { useMetar, useTaf } from "./services/useMetar";
+import { decodeMetar, decodeTaf, flightCategoryColor, ceilingFt, ktToMph } from "./services/metar";
 import { useAuth } from "./auth/AuthContext";
 import { AppleSignInButton } from "./auth/AppleSignInButton";
 import { useEntitlements } from "./entitlements";
@@ -95,6 +97,7 @@ const DEFAULT_ALERT_VOLUMES: AlertVolumeSettings = {
 };
 
 const ALERT_VOLUMES_KEY = "dronedaa.alertVolumes";
+const WX_SOURCE_KEY = "dronedaa.wxSource";
 
 function loadAlertVolumes(): AlertVolumeSettings {
   try {
@@ -786,6 +789,18 @@ export default function App() {
   const [weatherData, setWeatherData] = useState<WeatherResponse | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
 
+  // Weather tab source: Apple Weather (forecast) vs METAR (official aviation obs)
+  const [wxSource, setWxSource] = useState<"apple" | "metar">(() => {
+    try {
+      return localStorage.getItem(WX_SOURCE_KEY) === "metar" ? "metar" : "apple";
+    } catch { return "apple"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(WX_SOURCE_KEY, wxSource); } catch { /* private browsing */ }
+  }, [wxSource]);
+  /** ICAO of the station the user picked; null = use the nearest. */
+  const [metarStationId, setMetarStationId] = useState<string | null>(null);
+
   const weather = weatherData?.current ?? null;
   const hourly = weatherData?.hourly ?? [];
   const nextHour = weatherData?.nextHour ?? null;
@@ -1075,6 +1090,22 @@ export default function App() {
     rid.drones,
     tapMapPos?.lat, tapMapPos?.lon,
   ]);
+
+  // ── METAR (aviation weather) ──────────────────────────────────────
+  // Only fetched while the user is actually looking at the METAR source,
+  // so the proxy isn't hit for users who never open it.
+  const metar = useMetar(
+    resolvedCenter,
+    panelTab === "weather" && wxSource === "metar",
+  );
+  const selectedMetar = useMemo(() => {
+    if (!metar.stations.length) return null;
+    return metar.stations.find((s) => s.icaoId === metarStationId) ?? metar.stations[0];
+  }, [metar.stations, metarStationId]);
+  const taf = useTaf(
+    selectedMetar?.icaoId ?? null,
+    panelTab === "weather" && wxSource === "metar",
+  );
 
   // Auto-center map when center source config changes and resolves to a distant location
   const prevCenterSourceRef = useRef(centerSource);
@@ -2410,7 +2441,27 @@ export default function App() {
                   </p>
                 )}
 
-                {weatherLoading && !weather ? (
+                {/* Source: Apple forecast vs official aviation observation */}
+                <div className="row">
+                  <span className="rowTitle">Source</span>
+                  <div className="btnRow">
+                    <button
+                      className={`chipBtn compact ${wxSource === "apple" ? "active" : ""}`}
+                      onClick={() => setWxSource("apple")}
+                    >
+                      Apple
+                    </button>
+                    <button
+                      className={`chipBtn compact ${wxSource === "metar" ? "active" : ""}`}
+                      onClick={() => setWxSource("metar")}
+                    >
+                      METAR
+                    </button>
+                  </div>
+                </div>
+
+                {wxSource === "apple" && (
+                  weatherLoading && !weather ? (
                   <p className="smallMuted">Loading weather...</p>
                 ) : weather ? (
                   <>
@@ -2541,6 +2592,190 @@ export default function App() {
                   </>
                 ) : (
                   <p className="smallMuted">Weather data unavailable.</p>
+                  )
+                )}
+
+                {wxSource === "metar" && (
+                  metar.loading && !metar.stations.length ? (
+                    <p className="smallMuted">Finding nearby reporting stations...</p>
+                  ) : metar.error && !selectedMetar ? (
+                    <p className="smallMuted" style={{ lineHeight: 1.5 }}>
+                      Couldn't reach the aviation weather service. METAR requires internet —
+                      if you're connected to your receiver's Wi-Fi hotspot, that network has
+                      no internet path. Switch to Wi-Fi or cellular to load weather, then back
+                      to the receiver for traffic.
+                    </p>
+                  ) : !selectedMetar ? (
+                    <p className="smallMuted">No reporting stations found nearby.</p>
+                  ) : (
+                    <>
+                      {/* Nearest reporting airports */}
+                      <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                        <span className="rowTitle">Station</span>
+                        <div className="btnRow">
+                          {metar.stations.map((s) => (
+                            <button
+                              key={s.icaoId}
+                              className={`chipBtn compact ${s.icaoId === selectedMetar.icaoId ? "active" : ""}`}
+                              onClick={() => setMetarStationId(s.icaoId)}
+                            >
+                              {s.icaoId}{s.distanceNm != null ? ` · ${s.distanceNm} nm` : ""}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Observation summary — aviation units, as reported */}
+                      <div className="kv">
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontWeight: 700, fontSize: 14 }}>{selectedMetar.icaoId}</span>
+                          {selectedMetar.flightCategory && (
+                            <span style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: "2px 8px",
+                              borderRadius: 999,
+                              color: flightCategoryColor(selectedMetar.flightCategory),
+                              border: `1px solid ${flightCategoryColor(selectedMetar.flightCategory)}`,
+                            }}>
+                              {selectedMetar.flightCategory}
+                            </span>
+                          )}
+                        </div>
+                        {selectedMetar.name && (
+                          <div className="smallMuted">{selectedMetar.name}</div>
+                        )}
+                        <div style={{
+                          display: "grid",
+                          gridTemplateColumns: "auto 1fr",
+                          gap: "4px 10px",
+                          marginTop: 6,
+                          fontSize: 13,
+                        }}>
+                          <span style={{ color: "rgba(255,255,255,0.5)" }}>Wind</span>
+                          <span>
+                            {selectedMetar.windSpeedKt == null ? "—"
+                              : selectedMetar.windSpeedKt === 0 ? "Calm"
+                              : `${selectedMetar.windDirDeg === "VRB" || selectedMetar.windDirDeg == null
+                                  ? "VRB"
+                                  : `${String(selectedMetar.windDirDeg).padStart(3, "0")}°`} at ${selectedMetar.windSpeedKt} kt${
+                                  selectedMetar.windGustKt != null ? ` G${selectedMetar.windGustKt} kt` : ""
+                                } (${ktToMph(selectedMetar.windSpeedKt)} mph)`}
+                          </span>
+
+                          <span style={{ color: "rgba(255,255,255,0.5)" }}>Visibility</span>
+                          <span>{selectedMetar.visibilityRaw != null ? `${selectedMetar.visibilityRaw} SM` : "—"}</span>
+
+                          <span style={{ color: "rgba(255,255,255,0.5)" }}>Ceiling</span>
+                          <span>
+                            {(() => {
+                              const c = ceilingFt(selectedMetar.clouds);
+                              return c != null ? `${c.toLocaleString()} ft` : "Unlimited";
+                            })()}
+                          </span>
+
+                          <span style={{ color: "rgba(255,255,255,0.5)" }}>Temp / Dewpt</span>
+                          <span>
+                            {selectedMetar.tempC != null ? `${Math.round(selectedMetar.tempC)}°C` : "—"}
+                            {selectedMetar.dewpC != null ? ` / ${Math.round(selectedMetar.dewpC)}°C` : ""}
+                          </span>
+
+                          <span style={{ color: "rgba(255,255,255,0.5)" }}>Altimeter</span>
+                          <span>{selectedMetar.altimeterInHg != null ? `${selectedMetar.altimeterInHg.toFixed(2)} inHg` : "—"}</span>
+                        </div>
+                      </div>
+
+                      {/* Raw observation */}
+                      <div className="sectionTitle" style={{ fontSize: 12, marginTop: 4 }}>Raw Observation</div>
+                      <div className="kv" style={{
+                        fontFamily: "'SF Mono', Menlo, Consolas, monospace",
+                        fontSize: 11,
+                        lineHeight: 1.5,
+                        color: "rgba(255,255,255,0.6)",
+                        wordBreak: "break-word",
+                      }}>
+                        {selectedMetar.rawOb ?? "—"}
+                      </div>
+
+                      {/* Plain-English translation of the same observation */}
+                      <div className="sectionTitle" style={{ fontSize: 12, marginTop: 4 }}>Plain English</div>
+                      <div className="kv" style={{ gap: 4, fontSize: 13, lineHeight: 1.45 }}>
+                        {decodeMetar(selectedMetar).map((line, i) => (
+                          <div key={i}>{line}</div>
+                        ))}
+                      </div>
+
+                      {/* ── TAF (forecast) ── */}
+                      <div className="divider" />
+                      <div className="sectionTitle">
+                        Forecast (TAF)
+                        {taf.taf?.validFrom != null && (
+                          <span className="smallMuted" style={{ fontWeight: 400, marginLeft: 6 }}>
+                            {new Date(taf.taf.validFrom).toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric" })}
+                            {" – "}
+                            {taf.taf.validTo != null
+                              ? new Date(taf.taf.validTo).toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric" })
+                              : ""}
+                          </span>
+                        )}
+                      </div>
+
+                      {taf.loading && !taf.taf ? (
+                        <p className="smallMuted">Loading forecast...</p>
+                      ) : taf.unavailable ? (
+                        <p className="smallMuted">
+                          No TAF is issued for {selectedMetar.icaoId} — only larger airports
+                          publish forecasts. Try a nearby station above.
+                        </p>
+                      ) : taf.error ? (
+                        <p className="smallMuted">Forecast unavailable: {taf.error}</p>
+                      ) : taf.taf ? (
+                        <>
+                          {/* Decoded periods — the active one is highlighted */}
+                          {decodeTaf(taf.taf).map((p, i) => (
+                            <div
+                              key={i}
+                              className="kv"
+                              style={{
+                                gap: 3,
+                                fontSize: 13,
+                                lineHeight: 1.4,
+                                ...(p.active
+                                  ? { border: "1px solid rgba(10,132,255,0.45)", background: "rgba(10,132,255,0.08)" }
+                                  : null),
+                              }}
+                            >
+                              <div style={{ fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                                {p.header}
+                                {p.active && (
+                                  <span style={{ fontSize: 10, fontWeight: 700, color: "#0a84ff" }}>NOW</span>
+                                )}
+                              </div>
+                              {p.lines.map((line, j) => (
+                                <div key={j} style={{ color: "rgba(255,255,255,0.8)" }}>{line}</div>
+                              ))}
+                            </div>
+                          ))}
+
+                          {/* Raw forecast */}
+                          <div className="sectionTitle" style={{ fontSize: 12, marginTop: 4 }}>Raw TAF</div>
+                          <div className="kv" style={{
+                            fontFamily: "'SF Mono', Menlo, Consolas, monospace",
+                            fontSize: 11,
+                            lineHeight: 1.5,
+                            color: "rgba(255,255,255,0.6)",
+                            wordBreak: "break-word",
+                          }}>
+                            {taf.taf.rawTaf ?? "—"}
+                          </div>
+                        </>
+                      ) : null}
+
+                      <div style={{ marginTop: 8, fontSize: 11, color: "rgba(255,255,255,0.25)" }}>
+                        NOAA / aviationweather.gov
+                      </div>
+                    </>
+                  )
                 )}
               </div>
             )}

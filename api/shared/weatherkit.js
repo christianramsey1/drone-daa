@@ -64,9 +64,11 @@ function celsiusToFahrenheit(c) {
   return Math.round((c * 9) / 5 + 32);
 }
 
-function msToMph(ms) {
-  if (ms == null || !Number.isFinite(ms)) return null;
-  return Math.round(ms * 2.237);
+// WeatherKit REST returns wind speeds in KILOMETERS PER HOUR (not m/s —
+// treating them as m/s inflated every wind reading by 3.6x).
+function kmhToMph(kmh) {
+  if (kmh == null || !Number.isFinite(kmh)) return null;
+  return Math.round(kmh * 0.621371);
 }
 
 // Per-lake cache
@@ -132,9 +134,9 @@ async function fetchWeatherKit({ lat, lon, timezone, lakeId }) {
       temperature_2m: celsiusToFahrenheit(current.temperature),
       temperatureApparent: celsiusToFahrenheit(current.temperatureApparent),
       humidity: current.humidity != null ? Math.round(current.humidity * 100) : null,
-      wind_speed_10m: msToMph(current.windSpeed),
+      wind_speed_10m: kmhToMph(current.windSpeed),
       wind_direction_10m: current.windDirection,
-      wind_gusts_10m: msToMph(current.windGust),
+      wind_gusts_10m: kmhToMph(current.windGust),
       cloud_cover: current.cloudCover != null ? Math.round(current.cloudCover * 100) : null,
       visibility: current.visibility,
       pressure: current.pressure,
@@ -150,7 +152,7 @@ async function fetchWeatherKit({ lat, lon, timezone, lakeId }) {
       temperatureApparent: celsiusToFahrenheit(h.temperatureApparent),
       precipitationChance: h.precipitationChance != null ? Math.round(h.precipitationChance * 100) : null,
       precipitationType: h.precipitationType,
-      windSpeed: msToMph(h.windSpeed),
+      windSpeed: kmhToMph(h.windSpeed),
       windDirection: h.windDirection,
       conditionCode: h.conditionCode,
       uvIndex: h.uvIndex,
@@ -166,7 +168,7 @@ async function fetchWeatherKit({ lat, lon, timezone, lakeId }) {
       sunrise: d.sunrise,
       sunset: d.sunset,
       uvIndexMax: d.uvIndexMax,
-      windSpeedMax: msToMph(d.windSpeedMax),
+      windSpeedMax: kmhToMph(d.windSpeedMax),
     })),
 
     alerts: alerts.map((a) => ({
