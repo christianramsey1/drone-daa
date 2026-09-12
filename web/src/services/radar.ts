@@ -47,6 +47,8 @@ export function radarTileUrl(
   y: number,
   z: number,
   refreshToken: number,
+  /** ISO8601 frame time from /api/aviation/radar-frames; omit for latest. */
+  frameTime?: string | null,
 ): string {
   const { minX, minY, maxX, maxY } = tileBboxMercator(z, x, y);
   const params = new URLSearchParams({
@@ -63,8 +65,14 @@ export function radarTileUrl(
     // no axis swap to worry about (verified against a second radar source).
     crs: "EPSG:3857",
     bbox: `${minX},${minY},${maxX},${maxY}`,
-    frame: String(refreshToken),
   });
+  if (frameTime) {
+    // Requesting a specific frame makes the URL self-identifying, so the
+    // browser cache can serve it on later animation loops.
+    params.set("time", frameTime);
+  } else {
+    params.set("frame", String(refreshToken));
+  }
   return `${NWS_RADAR_WMS}?${params.toString()}`;
 }
 
@@ -82,6 +90,15 @@ export const RADAR_REFRESH_MS = 4 * 60 * 1000;
 export const RADAR_OPACITY = 0.55;
 
 export const RADAR_ATTRIBUTION = "NOAA / NWS nowCOAST";
+
+/** Frames pulled for the animation loop — 8 x 4 min covers about half an hour. */
+export const RADAR_ANIMATION_FRAMES = 8;
+
+/** Milliseconds each frame is held during playback. */
+export const RADAR_FRAME_HOLD_MS = 500;
+
+/** Extra pause on the newest frame so the loop reads as "now". */
+export const RADAR_LOOP_PAUSE_MS = 1200;
 
 /** Reflectivity bands, in the order a storm builds. */
 export const RADAR_LEGEND: Array<{ label: string; color: string }> = [

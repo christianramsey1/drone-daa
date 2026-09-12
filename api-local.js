@@ -9,6 +9,7 @@ const mapkitTokenHandler = require("./api/mapkit/token");
 const weatherHandler = require("./api/weather/index");
 const metarHandler = require("./api/aviation/metar");
 const tafHandler = require("./api/aviation/taf");
+const radarFramesHandler = require("./api/aviation/radar-frames");
 const authAppleHandler = require("./api/auth/apple");
 const entitlementsHandler = require("./api/me/entitlements");
 const purchaseVerifyHandler = require("./api/purchases/ios/verify");
@@ -52,6 +53,7 @@ app.get("/api/weather", wrap(weatherHandler));
 // --- Aviation weather (nearest METAR observations + TAF) ---
 app.get("/api/aviation/metar", wrap(metarHandler));
 app.get("/api/aviation/taf", wrap(tafHandler));
+app.get("/api/aviation/radar-frames", wrap(radarFramesHandler));
 
 // --- Auth: Sign in with Apple ---
 app.post("/api/auth/apple", wrap(authAppleHandler));

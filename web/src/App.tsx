@@ -19,6 +19,7 @@ import { useSkyAlert, type SkyAlertSettings } from "./services/useSkyAlert";
 import { useMetar, useTaf } from "./services/useMetar";
 import { decodeMetar, decodeTaf, flightCategoryColor, ceilingFt, ktToMph } from "./services/metar";
 import { radarTileUrl, RADAR_REFRESH_MS, RADAR_OPACITY, RADAR_ATTRIBUTION, RADAR_LEGEND, RADAR_MAX_NATIVE_ZOOM } from "./services/radar";
+import { useRadarFrames } from "./services/useRadarFrames";
 import { useAuth } from "./auth/AuthContext";
 import { AppleSignInButton } from "./auth/AppleSignInButton";
 import { useEntitlements } from "./entitlements";
@@ -835,6 +836,14 @@ export default function App() {
     return () => clearInterval(id);
   }, [radarEnabled]);
 
+  // Animation over the last ~30 minutes of published frames. Off by default:
+  // a loop pulls a full set of tiles per frame, which isn't free on cellular.
+  const [radarAnimating, setRadarAnimating] = useState(false);
+  useEffect(() => {
+    if (!radarEnabled) setRadarAnimating(false);
+  }, [radarEnabled]);
+  const radarFrames = useRadarFrames(radarEnabled && radarAnimating, radarAnimating);
+
   const weather = weatherData?.current ?? null;
   const hourly = weatherData?.hourly ?? [];
   const nextHour = weatherData?.nextHour ?? null;
@@ -1504,18 +1513,20 @@ export default function App() {
     if (radarEnabled) {
       // Radar last so precipitation draws over the sectional. Wider zoom
       // range than the chart — weather matters at every scale.
+      const frameTime = radarAnimating ? radarFrames.currentFrame : null;
       overlays.push({
         id: "nws-radar",
-        tileUrlFn: (x, y, z) => radarTileUrl(x, y, z, radarFrame),
+        tileUrlFn: (x, y, z) => radarTileUrl(x, y, z, radarFrame, frameTime),
         opacity: RADAR_OPACITY,
         minZoom: 3,
         maxZoom: 18,
         maxNativeZoom: RADAR_MAX_NATIVE_ZOOM,
-        version: radarFrame,
+        // While animating, the frame time is what identifies the imagery.
+        version: frameTime ?? radarFrame,
       });
     }
     return overlays;
-  }, [vfrSectionalEnabled, radarEnabled, radarFrame]);
+  }, [vfrSectionalEnabled, radarEnabled, radarFrame, radarAnimating, radarFrames.currentFrame]);
 
   // ── Derived ─────────────────────────────────────────────────────
 
@@ -2507,21 +2518,81 @@ export default function App() {
                   </label>
                 </div>
                 {radarEnabled && (
-                  <div className="kv" style={{ gap: 6 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      {RADAR_LEGEND.map((band) => (
-                        <div key={band.label} style={{ flex: 1, textAlign: "center" }}>
-                          <div style={{ height: 6, borderRadius: 3, background: band.color }} />
-                          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.45)", marginTop: 3 }}>
-                            {band.label}
+                  <>
+                    <div className="row">
+                      <div>
+                        <div className="rowTitle">Animate</div>
+                        <div className="rowSub">Loop the last ~30 minutes</div>
+                      </div>
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={radarAnimating}
+                          onChange={() => setRadarAnimating((v) => !v)}
+                        />
+                        <span className="slider" />
+                      </label>
+                    </div>
+
+                    <div className="kv" style={{ gap: 6 }}>
+                      {/* Frame readout — without a timestamp a loop is just motion */}
+                      {radarAnimating && (
+                        radarFrames.error ? (
+                          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
+                            Couldn't load the frame list; showing the latest image.
                           </div>
-                        </div>
-                      ))}
+                        ) : radarFrames.frames.length === 0 ? (
+                          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
+                            Loading frames...
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                              <span style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                                {radarFrames.currentFrame
+                                  ? new Date(radarFrames.currentFrame).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+                                  : "—"}
+                              </span>
+                              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>
+                                frame {radarFrames.index + 1} of {radarFrames.frames.length}
+                                {radarFrames.index === radarFrames.frames.length - 1 ? " · latest" : ""}
+                              </span>
+                            </div>
+                            {/* Position within the loop */}
+                            <div style={{ display: "flex", gap: 2 }}>
+                              {radarFrames.frames.map((f, i) => (
+                                <div
+                                  key={f}
+                                  style={{
+                                    flex: 1,
+                                    height: 3,
+                                    borderRadius: 2,
+                                    background: i === radarFrames.index
+                                      ? "#0a84ff"
+                                      : "rgba(255,255,255,0.15)",
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </>
+                        )
+                      )}
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {RADAR_LEGEND.map((band) => (
+                          <div key={band.label} style={{ flex: 1, textAlign: "center" }}>
+                            <div style={{ height: 6, borderRadius: 3, background: band.color }} />
+                            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.45)", marginTop: 3 }}>
+                              {band.label}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
+                        {RADAR_ATTRIBUTION} · new frame every 4 min · needs internet
+                      </div>
                     </div>
-                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
-                      {RADAR_ATTRIBUTION} · updates every few minutes · needs internet
-                    </div>
-                  </div>
+                  </>
                 )}
 
                 <div className="divider" />
