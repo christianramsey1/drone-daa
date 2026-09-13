@@ -842,7 +842,26 @@ export default function App() {
   useEffect(() => {
     if (!radarEnabled) setRadarAnimating(false);
   }, [radarEnabled]);
-  const radarFrames = useRadarFrames(radarEnabled && radarAnimating, radarAnimating);
+  // Frames are fetched whenever radar is on, not just while animating — the
+  // frame list is ~350 bytes and it's what lets the map label how old the
+  // displayed image is. Even the newest published frame runs several minutes
+  // behind, so "live" would be a lie in either mode.
+  const radarFrames = useRadarFrames(radarEnabled, radarAnimating);
+
+  // Minutes-ago ticker for the on-map radar label. Cheap (no network) and
+  // only runs while radar is on.
+  const [radarClock, setRadarClock] = useState(() => Date.now());
+  useEffect(() => {
+    if (!radarEnabled) return;
+    setRadarClock(Date.now());
+    const id = setInterval(() => setRadarClock(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, [radarEnabled]);
+  const radarAgeMin = useMemo(() => {
+    if (!radarFrames.currentFrame) return null;
+    const ms = radarClock - new Date(radarFrames.currentFrame).getTime();
+    return Math.max(0, Math.round(ms / 60000));
+  }, [radarFrames.currentFrame, radarClock]);
 
   const weather = weatherData?.current ?? null;
   const hourly = weatherData?.hourly ?? [];
@@ -2506,7 +2525,7 @@ export default function App() {
                 <div className="row">
                   <div>
                     <div className="rowTitle">Precipitation Radar</div>
-                    <div className="rowSub">NWS national mosaic, on the map</div>
+                    <div className="rowSub">NWS national mosaic — observed, not a forecast</div>
                   </div>
                   <label className="switch">
                     <input
@@ -2522,7 +2541,7 @@ export default function App() {
                     <div className="row">
                       <div>
                         <div className="rowTitle">Animate</div>
-                        <div className="rowSub">Loop the last ~30 minutes</div>
+                        <div className="rowSub">Replay the last ~30 minutes</div>
                       </div>
                       <label className="switch">
                         <input
@@ -2554,8 +2573,8 @@ export default function App() {
                                   : "—"}
                               </span>
                               <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>
-                                frame {radarFrames.index + 1} of {radarFrames.frames.length}
-                                {radarFrames.index === radarFrames.frames.length - 1 ? " · latest" : ""}
+                                {radarAgeMin != null && (radarAgeMin < 1 ? "just now" : `${radarAgeMin} min ago`)}
+                                {" · "}frame {radarFrames.index + 1} of {radarFrames.frames.length}
                               </span>
                             </div>
                             {/* Position within the loop */}
@@ -3598,6 +3617,33 @@ export default function App() {
               fontVariantNumeric: "tabular-nums",
             }}>
               {(latencyMs / 1000).toFixed(1)}s latency
+            </span>
+          </div>
+        )}
+
+        {/* Radar age — states plainly that the overlay is an observation from
+            the recent past, not a forecast. Without this a moving loop reads
+            as a projection. */}
+        {radarEnabled && radarAgeMin != null && (
+          <div
+            className="pill"
+            onClick={() => { setPanelTab("weather"); setPanelOpen(true); }}
+            style={{ border: "1.5px solid rgba(10,132,255,0.55)" }}
+          >
+            <span style={{
+              display: "inline-block",
+              width: 6, height: 6, borderRadius: 3,
+              backgroundColor: "#0a84ff",
+              marginRight: 6,
+            }} />
+            <span style={{
+              fontSize: 11,
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+              fontVariantNumeric: "tabular-nums",
+            }}>
+              {radarAnimating ? "Radar replay · " : "Radar · "}
+              {radarAgeMin < 1 ? "just now" : `${radarAgeMin} min ago`}
             </span>
           </div>
         )}
