@@ -1,6 +1,6 @@
 // relay/gdl90-sim.js — GDL90 traffic simulator for testing without a receiver
 //
-//   node relay/gdl90-sim.js [--cycle 120]
+//   node relay/gdl90-sim.js [--cycle 120] [--host 127.0.0.1]
 //
 // Sends crafted GDL90 frames (heartbeat + traffic reports, correct CRC and
 // byte stuffing) to the relay's UDP listener on 127.0.0.1:4000. Targets are
@@ -17,6 +17,8 @@
 //            transitions: alert level, "— ft" display, and marker continuity.
 //
 // --cycle N sets the touch-and-go circuit duration in seconds (default 120).
+// --host sends to a device instead of the local relay — point it at an
+// iPhone's Wi-Fi IP to drive the native app's UDP listener directly.
 
 "use strict";
 
@@ -163,13 +165,15 @@ function touchAndGo(cycleSec, nowMs) {
 
 const cycleArg = process.argv.indexOf("--cycle");
 const CYCLE_SEC = cycleArg >= 0 ? Math.max(20, parseInt(process.argv[cycleArg + 1], 10) || 120) : 120;
+const hostArg = process.argv.indexOf("--host");
+const HOST = hostArg >= 0 && process.argv[hostArg + 1] ? process.argv[hostArg + 1] : "127.0.0.1";
 
 const sock = dgram.createSocket("udp4");
 let lastPhase = "";
 setInterval(() => {
   const tg = touchAndGo(CYCLE_SEC, Date.now());
   const bufs = [heartbeat(), ...staticTargets.map(traffic), traffic(tg)];
-  for (const b of bufs) sock.send(b, 4000, "127.0.0.1");
+  for (const b of bufs) sock.send(b, 4000, HOST);
 
   const phase = tg.airborne
     ? (tg.vertRateFpm != null && tg.vertRateFpm > 50 ? "CLIMB" : tg.vertRateFpm != null && tg.vertRateFpm < -50 ? "DESCENT" : "PATTERN")
@@ -180,5 +184,5 @@ setInterval(() => {
   }
 }, 500);
 
-console.log(`[sim] 3 static targets + TCHGO1 touch-and-gos (${CYCLE_SEC}s circuit) → udp://127.0.0.1:4000`);
+console.log(`[sim] 3 static targets + TCHGO1 touch-and-gos (${CYCLE_SEC}s circuit) → udp://${HOST}:4000`);
 console.log("[sim] center the app near 39.070, -77.560 to watch");
