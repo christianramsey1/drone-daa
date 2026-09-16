@@ -46,9 +46,13 @@ udp.on("message", (msg) => {
     msgCountTotal++;
 
     if (msgId === 0x14) {
-      // Traffic report
+      // Traffic report. Keep targets with zeroed lat/lon too — GDL-90 zeroes
+      // position for tracked targets the receiver can't place (parked
+      // aircraft whose surface position doesn't decode). The app lists them
+      // as "no position" instead of pretending they don't exist; matches the
+      // native iOS plugin, which never filtered them.
       const track = parseTrafficReport(payload);
-      if (track && track.lat !== 0 && track.lon !== 0) {
+      if (track) {
         track.lastSeen = Date.now();
         track.timestamp = Date.now();
         aircraft.set(track.id, track);

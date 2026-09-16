@@ -70,7 +70,8 @@ function traffic({ addr, lat, lon, altFt, airborne, speedKt, trackDeg, emitter, 
   const lonRaw = Math.round(lon * (1 << 23) / 180);
   const altRaw = altFt == null ? 0xFFF : Math.max(0, Math.min(0xFFE, Math.round((altFt + 1000) / 25)));
   const misc = (airborne ? 0x08 : 0x00) | 0x01; // bit3 airborne, bits1-0 true track
-  const hvel = Math.max(0, Math.min(0xFFE, Math.round(speedKt)));
+  // speedKt null → 0xFFF, "horizontal velocity invalid" (stationary targets)
+  const hvel = speedKt == null ? 0xFFF : Math.max(0, Math.min(0xFFE, Math.round(speedKt)));
   let vvel = 0x800; // "no data"
   if (vertRateFpm != null) {
     let units = Math.round(vertRateFpm / 64);
@@ -105,6 +106,13 @@ const staticTargets = [
   { addr: 0xA11111, lat: CENTER.lat + 0.3 * NM_LAT, lon: CENTER.lon, altFt: null, airborne: false, speedKt: 8,  trackDeg: 90,  emitter: 1,  callsign: "TAXI1" },
   { addr: 0xA22222, lat: CENTER.lat - 0.2 * NM_LAT, lon: CENTER.lon, altFt: null, airborne: false, speedKt: 12, trackDeg: 180, emitter: 18, callsign: "OPS2" },
   { addr: 0xA33333, lat: CENTER.lat, lon: CENTER.lon + 1.0 * NM_LON, altFt: 800, airborne: true, speedKt: 95, trackDeg: 270, emitter: 1, callsign: "AIR3" },
+  // Parked and transmitting, position decoded: stationary in every field —
+  // speed INVALID (0xFFF), altitude invalid, on ground. Must stay on the map.
+  { addr: 0xA55555, lat: CENTER.lat + 0.15 * NM_LAT, lon: CENTER.lon - 0.1 * NM_LON, altFt: null, airborne: false, speedKt: null, trackDeg: 0, emitter: 1, callsign: "PARKED1" },
+  // Tracked with NO decoded position (GDL-90 zeroes lat/lon) — the common
+  // case for parked aircraft whose surface position won't decode. Must show
+  // in the traffic list as "no position", never on the map.
+  { addr: 0xA66666, lat: 0, lon: 0, altFt: null, airborne: false, speedKt: null, trackDeg: 0, emitter: 1, callsign: "NOPOS1" },
 ];
 
 // Touch-and-go circuit: left closed traffic on a runway pointing true north.

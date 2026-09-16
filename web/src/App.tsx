@@ -481,10 +481,12 @@ function WeatherOfflineNotice({ what }: { what: string }) {
   );
 }
 
-function AircraftCard({ aircraft, distNm, alertLevel }: {
+function AircraftCard({ aircraft, distNm, alertLevel, noPos }: {
   aircraft: AircraftTrack;
   distNm?: number;
   alertLevel?: AlertLevel;
+  /** Receiver is tracking the target but has no decoded position for it */
+  noPos?: boolean;
 }) {
   const vertChar = aircraft.vertRateFpm
     ? aircraft.vertRateFpm > 100 ? "\u2191"
@@ -515,7 +517,11 @@ function AircraftCard({ aircraft, distNm, alertLevel }: {
       <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {aircraft.altFt != null ? Math.round(aircraft.altFt).toLocaleString() : "—"} ft{vertChar} · {aircraft.speedKts != null ? Math.round(aircraft.speedKts) : "—"} kts
       </span>
-      {distNm != null && (
+      {noPos ? (
+        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", flexShrink: 0, fontStyle: "italic" }}>
+          no position
+        </span>
+      ) : distNm != null && (
         <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", flexShrink: 0 }}>
           {distNm.toFixed(1)} nm
         </span>
@@ -1193,16 +1199,22 @@ export default function App() {
 
   // ── Sorted aircraft by distance ──────────────────────────────────
 
-  type AircraftWithDist = AircraftTrack & { _distNm?: number; _alertLevel: AlertLevel };
+  type AircraftWithDist = AircraftTrack & { _distNm?: number; _alertLevel: AlertLevel; _noPos: boolean };
 
   const sortedAircraft: AircraftWithDist[] = useMemo(() => {
     const center = resolvedCenter;
     const list: AircraftWithDist[] = adsb.aircraft
-      .filter((ac) => ac.lat !== 0 || ac.lon !== 0) // skip aircraft with no GPS fix
       .map((ac) => {
-      const d = center ? distanceNm(center, ac) : undefined;
+      // GDL-90 zeroes lat/lon when the receiver is tracking a target but has
+      // no decoded position — common for parked aircraft, whose surface
+      // position messages many receivers can't decode. They can't go on the
+      // map, but they must still show in the traffic list: a transmitting
+      // target with unknown position is information, not noise.
+      const noPos = ac.lat === 0 && ac.lon === 0;
+      const d = center && !noPos ? distanceNm(center, ac) : undefined;
       return {
         ...ac,
+        _noPos: noPos,
         _distNm: d,
         // Surface service/emergency vehicles never alert (they can't be a
         // collision threat), toggle or not. Aircraft reporting on-ground are
@@ -1229,6 +1241,7 @@ export default function App() {
       if (!currentIds.has(id)) history.delete(id);
     }
     for (const ac of adsb.aircraft) {
+      if (ac.lat === 0 && ac.lon === 0) continue; // no decoded position
       let trail = history.get(ac.id);
       if (!trail) { trail = []; history.set(ac.id, trail); }
       const last = trail[trail.length - 1];
@@ -1308,6 +1321,7 @@ export default function App() {
     }
 
     for (const ac of sortedAircraft) {
+      if (ac._noPos) continue; // tracked but no decoded position — list only
       const tagLines: string[] = [];
       if (aircraftDisplay.dataTagLines[0]) tagLines.push(ac.callsign || ac.id);
       if (aircraftDisplay.dataTagLines[1]) {
@@ -1359,7 +1373,7 @@ export default function App() {
     // Velocity vectors
     if (aircraftDisplay.velocityVector > 0) {
       for (const ac of sortedAircraft) {
-        if (ac.speedKts != null && ac.speedKts > 0) {
+        if (!ac._noPos && ac.speedKts != null && ac.speedKts > 0) {
           const end = destinationPoint(
             { lat: ac.lat, lon: ac.lon },
             ac.headingDeg,
@@ -3055,7 +3069,7 @@ export default function App() {
                         setSelectedDrone(null);
                         setPanelTab("details");
                       }}>
-                        <AircraftCard aircraft={ac} distNm={ac._distNm} alertLevel={ac._alertLevel} />
+                        <AircraftCard aircraft={ac} distNm={ac._distNm} alertLevel={ac._alertLevel} noPos={ac._noPos} />
                       </div>
                     ))}
                   </div>
