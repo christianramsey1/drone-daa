@@ -4,7 +4,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import MapKitMap, { type Annotation, type Polyline } from "./MapKitMap";
 import { getApiBaseUrl, isNative } from "./platform";
 import { useAdsb, type AdsbConnectionStatus } from "./services/useAdsb";
-import type { AircraftTrack } from "./services/adsb";
+import { isGroundVehicle, type AircraftTrack } from "./services/adsb";
 import { distanceNm, destinationPoint } from "./nav";
 import { useFaaLayers } from "./services/useFaaLayers";
 import { FAA_LAYERS, airspaceColor } from "./services/airspace";
@@ -173,14 +173,18 @@ type AlertLevel = "normal" | "caution" | "warning";
 
 function computeAlertLevel(
   distNm: number | undefined,
-  altFt: number,
+  altFt: number | null,
   settings: AlertVolumeSettings,
 ): AlertLevel {
   if (distNm == null) return "normal";
-  if (settings.innerEnabled && distNm <= settings.innerRangeNm && altFt <= settings.innerCeilingFt) {
+  // Unknown altitude (GDL-90 marks it invalid on many targets) is treated as
+  // inside the ceiling — missing data must not silence an alert. Previously
+  // null coerced to 0 ft implicitly; now it's deliberate.
+  const inCeiling = (ceilingFt: number) => altFt == null || altFt <= ceilingFt;
+  if (settings.innerEnabled && distNm <= settings.innerRangeNm && inCeiling(settings.innerCeilingFt)) {
     return "warning";
   }
-  if (settings.outerEnabled && distNm <= settings.outerRangeNm && altFt <= settings.outerCeilingFt) {
+  if (settings.outerEnabled && distNm <= settings.outerRangeNm && inCeiling(settings.outerCeilingFt)) {
     return "caution";
   }
   return "normal";
@@ -509,7 +513,7 @@ function AircraftCard({ aircraft, distNm, alertLevel }: {
         {aircraft.callsign || aircraft.id}
       </span>
       <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {Math.round(aircraft.altFt).toLocaleString()} ft{vertChar} · {Math.round(aircraft.speedKts)} kts
+        {aircraft.altFt != null ? Math.round(aircraft.altFt).toLocaleString() : "—"} ft{vertChar} · {aircraft.speedKts != null ? Math.round(aircraft.speedKts) : "—"} kts
       </span>
       {distNm != null && (
         <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", flexShrink: 0 }}>
@@ -1200,9 +1204,12 @@ export default function App() {
       return {
         ...ac,
         _distNm: d,
-        // Aircraft taxiing near an airport shouldn't page the operator —
-        // ground state comes from the GDL-90 traffic report's airborne bit.
-        _alertLevel: alertVolumes.ignoreGroundTraffic && ac.onGround
+        // Surface service/emergency vehicles never alert (they can't be a
+        // collision threat), toggle or not. Aircraft reporting on-ground are
+        // muted only when the user opts in — ground state comes from the
+        // GDL-90 traffic report's airborne bit. Neither is ever hidden;
+        // this only downgrades the alert level.
+        _alertLevel: isGroundVehicle(ac.category) || (alertVolumes.ignoreGroundTraffic && ac.onGround)
           ? "normal" as const
           : computeAlertLevel(d, ac.altFt, alertVolumes),
       };
@@ -1307,7 +1314,7 @@ export default function App() {
         const vert = ac.vertRateFpm
           ? ac.vertRateFpm > 100 ? "\u2191" : ac.vertRateFpm < -100 ? "\u2193" : ""
           : "";
-        tagLines.push(`${Math.round(ac.altFt)} ft${vert} ${Math.round(ac.speedKts)} kts`);
+        tagLines.push(`${ac.altFt != null ? Math.round(ac.altFt) : "—"} ft${vert} ${ac.speedKts != null ? Math.round(ac.speedKts) : "—"} kts`);
       }
       if (aircraftDisplay.dataTagLines[2]) tagLines.push(ac.category);
 
@@ -1316,7 +1323,7 @@ export default function App() {
         lat: ac.lat,
         lon: ac.lon,
         title: ac.callsign || ac.id,
-        subtitle: `${Math.round(ac.altFt)} ft`,
+        subtitle: `${ac.altFt != null ? Math.round(ac.altFt) : "—"} ft`,
         style: "aircraft",
         kind: "traffic",
         heading: ac.headingDeg,
@@ -1352,7 +1359,7 @@ export default function App() {
     // Velocity vectors
     if (aircraftDisplay.velocityVector > 0) {
       for (const ac of sortedAircraft) {
-        if (ac.speedKts > 0) {
+        if (ac.speedKts != null && ac.speedKts > 0) {
           const end = destinationPoint(
             { lat: ac.lat, lon: ac.lon },
             ac.headingDeg,
@@ -2330,11 +2337,11 @@ export default function App() {
                       <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 13 }}>
                         <div>
                           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Altitude</div>
-                          <div style={{ fontWeight: 600 }}>{Math.round(ac.altFt).toLocaleString()} ft{vertChar}</div>
+                          <div style={{ fontWeight: 600 }}>{ac.altFt != null ? `${Math.round(ac.altFt).toLocaleString()} ft` : "— ft"}{vertChar}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Speed</div>
-                          <div style={{ fontWeight: 600 }}>{Math.round(ac.speedKts)} kts</div>
+                          <div style={{ fontWeight: 600 }}>{ac.speedKts != null ? Math.round(ac.speedKts) : "—"} kts</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Heading</div>

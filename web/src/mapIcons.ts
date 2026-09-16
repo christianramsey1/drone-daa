@@ -352,6 +352,44 @@ export function getBreadcrumbDotUrl(): string {
   return _breadcrumbDotUrl;
 }
 
+export function createDroneElement(
+  headingDeg: number,
+  alertLevel: string,
+  iconSize: number,
+  dataTagLines: string[],
+  selected?: boolean,
+): HTMLDivElement {
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText = `width:${iconSize}px;height:${iconSize}px;position:relative;overflow:visible;`;
+  if (selected) {
+    wrapper.style.filter = "drop-shadow(0 0 8px #00aaff) drop-shadow(0 0 16px #00aaff) drop-shadow(0 0 24px #00aaff)";
+  }
+
+  const canvas = createDroneIcon(headingDeg, alertLevel, iconSize);
+  canvas.style.cssText = `display:block;width:${iconSize}px;height:${iconSize}px;`;
+  wrapper.appendChild(canvas);
+
+  if (dataTagLines.length > 0) {
+    const tag = document.createElement("div");
+    tag.style.cssText =
+      `position:absolute;left:${iconSize + 4}px;top:0;` +
+      "font-family:system-ui,-apple-system,sans-serif;font-size:10px;line-height:1.3;" +
+      "color:rgba(255,255,255,0.95);text-shadow:0 1px 2px rgba(0,0,0,0.9);" +
+      "white-space:nowrap;pointer-events:none;" +
+      (selected
+        ? "background:rgba(0,100,255,0.4);padding:1px 4px;border-radius:3px;border:1.5px solid #00aaff;"
+        : "background:rgba(0,0,0,0.55);padding:1px 4px;border-radius:3px;");
+    for (const line of dataTagLines) {
+      const div = document.createElement("div");
+      div.textContent = line;
+      tag.appendChild(div);
+    }
+    wrapper.appendChild(tag);
+  }
+
+  return wrapper;
+}
+
 export function createAircraftElement(
   headingDeg: number,
   alertLevel: string,

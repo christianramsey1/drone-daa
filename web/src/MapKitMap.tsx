@@ -6,7 +6,7 @@ import {
   createEndWaypointIcon,
   createGpsPositionIcon,
   createAircraftElement,
-  createDroneIcon,
+  createDroneElement,
   createOperatorIcon,
   getBreadcrumbDotUrl,
 } from "./mapIcons";
@@ -348,7 +348,12 @@ export default function MapKitMap({
     annotations.forEach((a) => {
       let annotation = annotationsMapRef.current.get(a.id);
 
-      // Aircraft/Drone: check if existing annotation needs full recreation
+      // Aircraft/Drone: when the visual key changes, repaint the existing
+      // DOM element IN PLACE. Removing and re-adding an annotation at an
+      // unchanged coordinate in the same pass can leave it unrendered until
+      // the map next moves — stationary ground targets appeared to vanish
+      // when a settings toggle changed only their alert color. Airborne
+      // targets masked the bug because they move.
       if (annotation && (a.style === "aircraft" || a.style === "drone")) {
         const heading = a.heading ?? 0;
         const iconSz = a.iconSize ?? 32;
@@ -357,9 +362,28 @@ export default function MapKitMap({
         const sel = a.selected ? "1" : "0";
         const newKey = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${sel}_${tagLines.join("|")}`;
         if (annotation.data?._key !== newKey) {
-          map.removeAnnotation(annotation);
-          annotationsMapRef.current.delete(a.id);
-          annotation = undefined; // recreate immediately below
+          const holder = annotation.data?._holder as
+            | { el: HTMLElement | null; fresh: HTMLElement }
+            | undefined;
+          if (holder) {
+            const fresh = a.style === "aircraft"
+              ? createAircraftElement(heading, level, iconSz, tagLines, a.selected)
+              : createDroneElement(heading, level, iconSz, tagLines, a.selected);
+            if (holder.el) {
+              holder.el.style.cssText = fresh.style.cssText;
+              holder.el.replaceChildren(...Array.from(fresh.childNodes));
+            } else {
+              // Factory hasn't run yet — make it use the latest visuals
+              holder.fresh = fresh;
+            }
+            annotation.data._key = newKey;
+            annotation.anchorOffset = new DOMPoint(0, -iconSz / 2);
+          } else {
+            // Annotation from before the repaint path existed — recreate
+            map.removeAnnotation(annotation);
+            annotationsMapRef.current.delete(a.id);
+            annotation = undefined;
+          }
         }
       }
 
@@ -426,61 +450,29 @@ export default function MapKitMap({
             anchorOffset: new DOMPoint(0, -12),
             calloutEnabled: false,
           });
-        } else if (a.style === "aircraft") {
-          // Aircraft: DOM-based annotation with icon + data tag
+        } else if (a.style === "aircraft" || a.style === "drone") {
+          // Aircraft/Drone: DOM-based annotation with icon + data tag. The
+          // element lives in a holder so later visual changes can repaint it
+          // in place instead of recreating the annotation (see above).
           const heading = a.heading ?? 0;
-          const iconSz = a.iconSize ?? 32;
+          const iconSz = a.iconSize ?? (a.style === "drone" ? 28 : 32);
           const tagLines = a.dataTagLines ?? [];
           const level = a.alertLevel ?? "normal";
           const sel = a.selected ? "1" : "0";
           const _key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${sel}_${tagLines.join("|")}`;
 
-          annotation = new mapkit.Annotation(coord, () => {
-            return createAircraftElement(heading, level, iconSz, tagLines, a.selected);
-          }, {
-            data: { id: a.id, style: a.style, kind: a.kind, heading, _key },
-            anchorOffset: new DOMPoint(0, -iconSz / 2),
-            calloutEnabled: false,
-            animates: false,
-          });
-        } else if (a.style === "drone") {
-          // Drone: DOM-based annotation with quadcopter icon + data tag
-          const heading = a.heading ?? 0;
-          const iconSz = a.iconSize ?? 28;
-          const tagLines = a.dataTagLines ?? [];
-          const level = a.alertLevel ?? "normal";
-          const sel = a.selected ? "1" : "0";
-          const _key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${sel}_${tagLines.join("|")}`;
+          const holder: { el: HTMLElement | null; fresh: HTMLElement } = {
+            el: null,
+            fresh: a.style === "aircraft"
+              ? createAircraftElement(heading, level, iconSz, tagLines, a.selected)
+              : createDroneElement(heading, level, iconSz, tagLines, a.selected),
+          };
 
           annotation = new mapkit.Annotation(coord, () => {
-            const wrapper = document.createElement("div");
-            wrapper.style.cssText = `width:${iconSz}px;height:${iconSz}px;position:relative;overflow:visible;`;
-            const canvas = createDroneIcon(heading, level, iconSz);
-            canvas.style.cssText = `display:block;width:${iconSz}px;height:${iconSz}px;`;
-            if (a.selected) {
-              wrapper.style.filter = "drop-shadow(0 0 8px #00aaff) drop-shadow(0 0 16px #00aaff) drop-shadow(0 0 24px #00aaff)";
-            }
-            wrapper.appendChild(canvas);
-            if (tagLines.length > 0) {
-              const tag = document.createElement("div");
-              tag.style.cssText =
-                `position:absolute;left:${iconSz + 4}px;top:0;` +
-                "font-family:system-ui,-apple-system,sans-serif;font-size:10px;line-height:1.3;" +
-                "color:rgba(255,255,255,0.95);text-shadow:0 1px 2px rgba(0,0,0,0.9);" +
-                "white-space:nowrap;pointer-events:none;" +
-                (a.selected
-                  ? "background:rgba(0,100,255,0.4);padding:1px 4px;border-radius:3px;border:1.5px solid #00aaff;"
-                  : "background:rgba(0,0,0,0.55);padding:1px 4px;border-radius:3px;");
-              for (const line of tagLines) {
-                const div = document.createElement("div");
-                div.textContent = line;
-                tag.appendChild(div);
-              }
-              wrapper.appendChild(tag);
-            }
-            return wrapper;
+            if (!holder.el) holder.el = holder.fresh;
+            return holder.el;
           }, {
-            data: { id: a.id, style: a.style, kind: a.kind, heading, _key },
+            data: { id: a.id, style: a.style, kind: a.kind, heading, _key, _holder: holder },
             anchorOffset: new DOMPoint(0, -iconSz / 2),
             calloutEnabled: false,
             animates: false,

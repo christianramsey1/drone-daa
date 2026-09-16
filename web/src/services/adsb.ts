@@ -6,15 +6,29 @@ export type AircraftTrack = {
   callsign?: string;
   lat: number;
   lon: number;
-  altFt: number;
+  /** null when the GDL-90 report marks altitude invalid — common for surface targets */
+  altFt: number | null;
   headingDeg: number;
-  speedKts: number;
+  /** null when the GDL-90 report marks velocity invalid */
+  speedKts: number | null;
   vertRateFpm?: number; // vertical rate (feet per minute)
   squawk?: string;
   category: string;  // emitter category label (Light, Large, Heavy, etc.)
   onGround: boolean;
   timestamp: number;
 };
+
+/**
+ * GDL-90 emitter categories 17/18 — airport surface vehicles (fire trucks,
+ * fuel trucks, mowers). They are never airborne and never a collision threat
+ * to a drone, so they must never raise a proximity alert. Labels match the
+ * mapping in GDL90Plugin.swift and relay/gdl90.js.
+ */
+const GROUND_VEHICLE_CATEGORIES = new Set(["Surface Emergency", "Surface Service"]);
+
+export function isGroundVehicle(category: string | undefined): boolean {
+  return category != null && GROUND_VEHICLE_CATEGORIES.has(category);
+}
 
 /** WebSocket snapshot from the GDL90 relay */
 export type AdsbSnapshot = {

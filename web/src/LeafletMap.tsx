@@ -32,6 +32,49 @@ type Props = {
 
 const DEFAULT_CENTER = { lat: 37.093, lon: -79.671 };
 
+/** Visual identity of a track marker — icon swaps happen when this changes. */
+function trackIconKey(a: Annotation): string {
+  const heading = a.heading ?? 0;
+  const iconSz = a.iconSize ?? (a.style === "drone" ? 28 : 32);
+  const tagLines = a.dataTagLines ?? [];
+  const level = a.alertLevel ?? "normal";
+  return `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${a.selected ? "1" : "0"}_${tagLines.join("|")}`;
+}
+
+/** DivIcon for an aircraft/drone marker — shared by create and in-place update. */
+function buildTrackDivIcon(a: Annotation): L.DivIcon {
+  const isDrone = a.style === "drone";
+  const heading = a.heading ?? 0;
+  const iconSz = a.iconSize ?? (isDrone ? 28 : 32);
+  const tagLines = a.dataTagLines ?? [];
+  const level = a.alertLevel ?? "normal";
+  const sel = a.selected;
+  const canvas = isDrone
+    ? createDroneIcon(heading, level, iconSz)
+    : createAircraftIcon(heading, level, iconSz);
+  const imgUrl = canvas.toDataURL();
+  const glowStyle = sel ? "filter:drop-shadow(0 0 8px #00aaff) drop-shadow(0 0 16px #00aaff) drop-shadow(0 0 24px #00aaff);" : "";
+  let tagHtml = "";
+  if (tagLines.length > 0) {
+    const tagContent = tagLines.map((l) => `<div>${l}</div>`).join("");
+    const tagBg = sel
+      ? `background:rgba(0,100,255,0.4);padding:${isDrone ? "1px 4px" : "2px 5px"};border-radius:3px;border:1.5px solid #00aaff;`
+      : "";
+    tagHtml = `<div style="position:absolute;left:${iconSz + 4}px;top:0;` +
+      "font-family:system-ui,-apple-system,sans-serif;font-size:10px;line-height:1.3;" +
+      "color:rgba(255,255,255,0.92);text-shadow:0 1px 3px rgba(0,0,0,0.8),0 0 6px rgba(0,0,0,0.6);" +
+      `white-space:nowrap;pointer-events:none;${tagBg}">${tagContent}</div>`;
+  }
+  return L.divIcon({
+    html: `<div style="width:${iconSz}px;height:${iconSz}px;position:relative;overflow:visible;${glowStyle}">` +
+      `<img src="${imgUrl}" width="${iconSz}" height="${iconSz}" style="display:block;" />` +
+      tagHtml + `</div>`,
+    className: "",
+    iconSize: [iconSz, iconSz],
+    iconAnchor: [iconSz / 2, iconSz / 2],
+  });
+}
+
 /**
  * Tile layer whose URLs come from a function rather than a template — needed
  * for WMS sources like the NWS radar mosaic, where each tile is a bbox query.
@@ -204,56 +247,26 @@ export default function LeafletMap({
     annotations.forEach((a) => {
       let marker = markersRef.current.get(a.id);
 
-      // Aircraft/Drone: check if needs recreation (heading/size/alert/selected changed)
+      // Aircraft/Drone: when the visual key changes, swap the icon in place —
+      // removing and re-adding a stationary marker just to change its color
+      // made ground targets blink out; setIcon keeps the marker on the map.
       if (marker && (a.style === "aircraft" || a.style === "drone")) {
-        const heading = a.heading ?? 0;
-        const iconSz = a.iconSize ?? 32;
-        const tagLines = a.dataTagLines ?? [];
-        const level = a.alertLevel ?? "normal";
-        const sel = a.selected ? "1" : "0";
-        const newKey = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${sel}_${tagLines.join("|")}`;
-        const prevKey = (marker as any)._daaKey;
-        if (prevKey !== newKey) {
-          map.removeLayer(marker);
-          markersRef.current.delete(a.id);
-          marker = undefined;
+        const newKey = trackIconKey(a);
+        if ((marker as any)._daaKey !== newKey) {
+          marker.setIcon(buildTrackDivIcon(a));
+          (marker as any)._daaKey = newKey;
         }
       }
 
       if (!marker) {
         let icon: L.DivIcon | L.Icon | undefined;
 
-        if (a.style === "aircraft") {
-          const heading = a.heading ?? 0;
-          const iconSz = a.iconSize ?? 32;
-          const tagLines = a.dataTagLines ?? [];
-          const level = a.alertLevel ?? "normal";
-          const sel = a.selected;
-          const canvas = createAircraftIcon(heading, level, iconSz);
-          const imgUrl = canvas.toDataURL();
-          const glowStyle = sel ? "filter:drop-shadow(0 0 8px #00aaff) drop-shadow(0 0 16px #00aaff) drop-shadow(0 0 24px #00aaff);" : "";
-          let tagHtml = "";
-          if (tagLines.length > 0) {
-            const tagContent = tagLines.map((l) => `<div>${l}</div>`).join("");
-            const tagBg = sel
-              ? "background:rgba(0,100,255,0.4);padding:2px 5px;border-radius:3px;border:1.5px solid #00aaff;"
-              : "";
-            tagHtml = `<div style="position:absolute;left:${iconSz + 4}px;top:0;` +
-              "font-family:system-ui,-apple-system,sans-serif;font-size:10px;line-height:1.3;" +
-              "color:rgba(255,255,255,0.92);text-shadow:0 1px 3px rgba(0,0,0,0.8),0 0 6px rgba(0,0,0,0.6);" +
-              `white-space:nowrap;pointer-events:none;${tagBg}">${tagContent}</div>`;
-          }
-          icon = L.divIcon({
-            html: `<div style="width:${iconSz}px;height:${iconSz}px;position:relative;overflow:visible;${glowStyle}">` +
-              `<img src="${imgUrl}" width="${iconSz}" height="${iconSz}" style="display:block;" />` +
-              tagHtml + `</div>`,
-            className: "",
-            iconSize: [iconSz, iconSz],
-            iconAnchor: [iconSz / 2, iconSz / 2],
-          });
-          marker = L.marker([a.lat, a.lon], { icon, interactive: !!onSelect }).addTo(map);
-          const key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${sel ? "1" : "0"}_${tagLines.join("|")}`;
-          (marker as any)._daaKey = key;
+        if (a.style === "aircraft" || a.style === "drone") {
+          marker = L.marker([a.lat, a.lon], {
+            icon: buildTrackDivIcon(a),
+            interactive: !!onSelect,
+          }).addTo(map);
+          (marker as any)._daaKey = trackIconKey(a);
         } else if (a.style === "gps-position") {
           const canvas = createGpsPositionIcon(a.color ?? "#007aff");
           const url = canvas.toDataURL();
@@ -273,37 +286,6 @@ export default function LeafletMap({
             iconAnchor: [3, 3],
           });
           marker = L.marker([a.lat, a.lon], { icon, interactive: false }).addTo(map);
-        } else if (a.style === "drone") {
-          const heading = a.heading ?? 0;
-          const iconSz = a.iconSize ?? 28;
-          const tagLines = a.dataTagLines ?? [];
-          const level = a.alertLevel ?? "normal";
-          const sel = a.selected;
-          const canvas = createDroneIcon(heading, level, iconSz);
-          const imgUrl = canvas.toDataURL();
-          const glowStyle = sel ? "filter:drop-shadow(0 0 8px #00aaff) drop-shadow(0 0 16px #00aaff) drop-shadow(0 0 24px #00aaff);" : "";
-          let tagHtml = "";
-          if (tagLines.length > 0) {
-            const tagContent = tagLines.map((l) => `<div>${l}</div>`).join("");
-            const tagBg = sel
-              ? "background:rgba(0,100,255,0.4);padding:1px 4px;border-radius:3px;border:1.5px solid #00aaff;"
-              : "";
-            tagHtml = `<div style="position:absolute;left:${iconSz + 4}px;top:0;` +
-              "font-family:system-ui,-apple-system,sans-serif;font-size:10px;line-height:1.3;" +
-              "color:rgba(255,255,255,0.92);text-shadow:0 1px 3px rgba(0,0,0,0.8),0 0 6px rgba(0,0,0,0.6);" +
-              `white-space:nowrap;pointer-events:none;${tagBg}">${tagContent}</div>`;
-          }
-          icon = L.divIcon({
-            html: `<div style="width:${iconSz}px;height:${iconSz}px;position:relative;overflow:visible;${glowStyle}">` +
-              `<img src="${imgUrl}" width="${iconSz}" height="${iconSz}" style="display:block;" />` +
-              tagHtml + `</div>`,
-            className: "",
-            iconSize: [iconSz, iconSz],
-            iconAnchor: [iconSz / 2, iconSz / 2],
-          });
-          marker = L.marker([a.lat, a.lon], { icon, interactive: !!onSelect }).addTo(map);
-          const key = `${Math.round(heading / 5) * 5}_${iconSz}_${level}_${sel ? "1" : "0"}_${tagLines.join("|")}`;
-          (marker as any)._daaKey = key;
         } else if (a.style === "rid-operator") {
           const canvas = createOperatorIcon(16);
           const url = canvas.toDataURL();
