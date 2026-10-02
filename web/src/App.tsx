@@ -102,6 +102,9 @@ const ALERT_VOLUMES_KEY = "dronedaa.alertVolumes";
 const WX_SOURCE_KEY = "dronedaa.wxSource";
 const RADAR_KEY = "dronedaa.radarEnabled";
 
+/** Matches the weather API's server-side cache; polling faster just re-reads it. */
+const WEATHER_REFRESH_MS = 5 * 60 * 1000;
+
 function loadAlertVolumes(): AlertVolumeSettings {
   try {
     const stored = localStorage.getItem(ALERT_VOLUMES_KEY);
@@ -402,6 +405,28 @@ function formatHour(iso: string): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * Index of the next-hour minute covering `now`, or -1 once the whole forecast
+ * window has elapsed.
+ *
+ * Minute entries carry absolute timestamps starting at the moment the forecast
+ * was FETCHED — so array index is "minutes since fetch", never "minutes from
+ * now". Treating it as the latter freezes any countdown at whatever the data
+ * said when it arrived.
+ */
+function currentMinuteIndex(
+  minutes: Array<{ time: string }> | undefined,
+  now: number,
+): number {
+  if (!minutes || minutes.length === 0) return -1;
+  for (let i = 0; i < minutes.length; i++) {
+    const t = Date.parse(minutes[i].time);
+    if (!Number.isFinite(t)) continue;
+    if (t + 60_000 > now) return i; // first minute that hasn't fully elapsed
+  }
+  return -1;
 }
 
 function nextHourSummaryText(nextHour: NextHourData | null | undefined): string {
@@ -890,17 +915,34 @@ export default function App() {
     return parts.slice(0, 3).join("  ·  ");
   }, [weather]);
 
+  // Ticks the precip countdown between weather fetches — it is computed
+  // against wall-clock time, so it needs a re-render to advance.
+  const [wxClock, setWxClock] = useState(() => Date.now());
+  useEffect(() => {
+    if (!nextHour?.minutes?.length) return;
+    setWxClock(Date.now());
+    const id = setInterval(() => setWxClock(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, [nextHour]);
+
   // Next-hour precip alert — replaces the pill summary and turns it amber
   // (caution) when rain is imminent; red is reserved for worse in aviation.
+  // Timing comes from each minute's absolute timestamp, so the countdown stays
+  // true as the data ages and keeps ticking between fetches.
   const precipAlert = useMemo(() => {
     const mins = nextHour?.minutes;
     if (!mins || mins.length === 0) return null;
-    const precipStartIdx = mins.findIndex((m) => (m.precipitationChance ?? 0) > 30);
-    const currentlyPrecip = mins[0]?.precipitationChance != null && mins[0].precipitationChance > 30;
-    if (currentlyPrecip) return "🌧️ Precipitation now";
-    if (precipStartIdx > 0 && precipStartIdx <= 60) return `🌧️ Rain in ~${precipStartIdx} min`;
+    const start = currentMinuteIndex(mins, wxClock);
+    if (start < 0) return null; // forecast window fully elapsed
+    const CHANCE_PCT = 30;
+    if ((mins[start].precipitationChance ?? 0) > CHANCE_PCT) return "🌧️ Precipitation now";
+    for (let i = start + 1; i < mins.length; i++) {
+      if ((mins[i].precipitationChance ?? 0) <= CHANCE_PCT) continue;
+      const minutesOut = Math.max(1, Math.round((Date.parse(mins[i].time) - wxClock) / 60_000));
+      return minutesOut <= 60 ? `🌧️ Rain in ~${minutesOut} min` : null;
+    }
     return null;
-  }, [nextHour]);
+  }, [nextHour, wxClock]);
 
   // ADS-B
   const adsb = useAdsb();
@@ -1097,25 +1139,46 @@ export default function App() {
 
   // ── Weather fetch ─────────────────────────────────────────────────
 
+  // Refetched on a timer and on foreground. The next-hour forecast is a
+  // rolling window, so a one-shot fetch left the precip countdown frozen at
+  // whatever it said when the app launched. Coordinates are rounded to the
+  // same precision the API caches at, which also stops map panning from
+  // refetching continuously.
+  const wxCenter = gps ?? mapCenter;
+  const wxLat = wxCenter ? wxCenter.lat.toFixed(2) : null;
+  const wxLon = wxCenter ? wxCenter.lon.toFixed(2) : null;
+
   useEffect(() => {
-    const center = gps ?? mapCenter;
-    if (!center) return;
-
+    if (wxLat == null || wxLon == null) return;
     let cancelled = false;
-    setWeatherLoading(true);
 
-    const url = `${getApiBaseUrl()}/api/weather?lat=${center.lat}&lon=${center.lon}`;
-    fetch(url)
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        if (data?.current) setWeatherData(data);
-      })
-      .catch(() => { /* weather unavailable */ })
-      .finally(() => { if (!cancelled) setWeatherLoading(false); });
+    const load = () => {
+      setWeatherLoading(true);
+      fetch(`${getApiBaseUrl()}/api/weather?lat=${wxLat}&lon=${wxLon}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (cancelled) return;
+          if (data?.current) setWeatherData(data);
+        })
+        .catch(() => { /* weather unavailable */ })
+        .finally(() => { if (!cancelled) setWeatherLoading(false); });
+    };
 
-    return () => { cancelled = true; };
-  }, [gps?.lat?.toFixed(2), gps?.lon?.toFixed(2), mapCenter?.lat, mapCenter?.lon]);
+    load();
+    const id = setInterval(load, WEATHER_REFRESH_MS);
+    // Timers are throttled or suspended while backgrounded — catch up on
+    // return, which is exactly when stale weather is most noticeable.
+    const onVisible = () => { if (document.visibilityState === "visible") load(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", load);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", load);
+    };
+  }, [wxLat, wxLon]);
 
   // ── Resolved center (3-tier fallback) ─────────────────────────────
 
@@ -2679,8 +2742,12 @@ export default function App() {
                             stroke="rgba(255,255,255,0.15)" strokeWidth="1" strokeDasharray="3,3" />
                           {/* Bars for each 5-min bucket (up to 12 bars) */}
                           {nextHour?.minutes && (() => {
+                            // Offset from the minute covering now, so the
+                            // "Now" label stays truthful as the data ages.
+                            const start = Math.max(0, currentMinuteIndex(nextHour.minutes, wxClock));
                             const buckets = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-                            return buckets.map((idx, i) => {
+                            return buckets.map((offset, i) => {
+                              const idx = start + offset;
                               const m = nextHour.minutes?.[idx];
                               const intensity = m?.precipitationIntensity ?? 0;
                               const h = Math.min(intensity * 60, 24); // scale: 1mm/hr → full bar
