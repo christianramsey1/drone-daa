@@ -104,6 +104,8 @@ const RADAR_KEY = "dronedaa.radarEnabled";
 
 /** Matches the weather API's server-side cache; polling faster just re-reads it. */
 const WEATHER_REFRESH_MS = 5 * 60 * 1000;
+/** Minimum data age before a foreground/focus event triggers a refetch. */
+const WEATHER_FOREGROUND_MIN_AGE_MS = 60 * 1000;
 
 function loadAlertVolumes(): AlertVolumeSettings {
   try {
@@ -1137,49 +1139,6 @@ export default function App() {
     };
   }, []);
 
-  // ── Weather fetch ─────────────────────────────────────────────────
-
-  // Refetched on a timer and on foreground. The next-hour forecast is a
-  // rolling window, so a one-shot fetch left the precip countdown frozen at
-  // whatever it said when the app launched. Coordinates are rounded to the
-  // same precision the API caches at, which also stops map panning from
-  // refetching continuously.
-  const wxCenter = gps ?? mapCenter;
-  const wxLat = wxCenter ? wxCenter.lat.toFixed(2) : null;
-  const wxLon = wxCenter ? wxCenter.lon.toFixed(2) : null;
-
-  useEffect(() => {
-    if (wxLat == null || wxLon == null) return;
-    let cancelled = false;
-
-    const load = () => {
-      setWeatherLoading(true);
-      fetch(`${getApiBaseUrl()}/api/weather?lat=${wxLat}&lon=${wxLon}`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (cancelled) return;
-          if (data?.current) setWeatherData(data);
-        })
-        .catch(() => { /* weather unavailable */ })
-        .finally(() => { if (!cancelled) setWeatherLoading(false); });
-    };
-
-    load();
-    const id = setInterval(load, WEATHER_REFRESH_MS);
-    // Timers are throttled or suspended while backgrounded — catch up on
-    // return, which is exactly when stale weather is most noticeable.
-    const onVisible = () => { if (document.visibilityState === "visible") load(); };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", load);
-
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", load);
-    };
-  }, [wxLat, wxLon]);
-
   // ── Resolved center (3-tier fallback) ─────────────────────────────
 
   const isValidCoord = (lat: number, lon: number): boolean =>
@@ -1225,6 +1184,64 @@ export default function App() {
     rid.drones,
     tapMapPos?.lat, tapMapPos?.lon,
   ]);
+
+  // ── Weather fetch ─────────────────────────────────────────────────
+
+  // Keyed to resolvedCenter — the point the alert rings are drawn around and
+  // every proximity distance is measured from — so the conditions shown are
+  // the conditions where the alerting happens, and match the coordinates the
+  // Weather tab prints. (It used to follow gps ?? mapCenter, which diverges
+  // once a center source is configured or the map is tapped.)
+  //
+  // Refetched on a timer and on foreground: the next-hour forecast is a
+  // rolling window, so a one-shot fetch left the precip countdown frozen at
+  // whatever it said when the app launched. Coordinates are rounded to the
+  // same precision the API caches at, which also stops map panning from
+  // refetching continuously.
+  const wxCenter = resolvedCenter;
+  const wxLat = wxCenter ? wxCenter.lat.toFixed(2) : null;
+  const wxLon = wxCenter ? wxCenter.lon.toFixed(2) : null;
+
+  const wxLastLoadRef = useRef(0);
+
+  useEffect(() => {
+    if (wxLat == null || wxLon == null) return;
+    let cancelled = false;
+
+    const load = () => {
+      wxLastLoadRef.current = Date.now();
+      setWeatherLoading(true);
+      fetch(`${getApiBaseUrl()}/api/weather?lat=${wxLat}&lon=${wxLon}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (cancelled) return;
+          if (data?.current) setWeatherData(data);
+        })
+        .catch(() => { /* weather unavailable */ })
+        .finally(() => { if (!cancelled) setWeatherLoading(false); });
+    };
+
+    // Returning to the app shouldn't refetch data that is still fresh —
+    // window focus in particular fires on ordinary interaction.
+    const loadIfStale = () => {
+      if (Date.now() - wxLastLoadRef.current >= WEATHER_FOREGROUND_MIN_AGE_MS) load();
+    };
+
+    load();
+    const id = setInterval(load, WEATHER_REFRESH_MS);
+    // Timers are throttled or suspended while backgrounded — catch up on
+    // return, which is exactly when stale weather is most noticeable.
+    const onVisible = () => { if (document.visibilityState === "visible") loadIfStale(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", loadIfStale);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", loadIfStale);
+    };
+  }, [wxLat, wxLon]);
 
   // ── METAR (aviation weather) ──────────────────────────────────────
   // Only fetched while the user is actually looking at the METAR source,
